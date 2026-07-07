@@ -153,6 +153,21 @@ function jsonp(url, timeoutMs = 8000) {
 
 const ITUNES = 'https://itunes.apple.com/search';
 
+// iTunes supporta CORS: fetch diretta come via principale (i content blocker
+// mobili spesso bloccano gli script di terze parti ma non le fetch), JSONP di riserva
+async function itunesGet(url, timeoutMs = 10000) {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeoutMs);
+    const res = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(t);
+    if (!res.ok) throw new Error('http ' + res.status);
+    return await res.json();
+  } catch {
+    return jsonp(url, timeoutMs);
+  }
+}
+
 // cache lookup anteprime in localStorage (persistente fra partite)
 const previewCache = store.get('gs_preview_cache', {});
 function savePreviewCache() {
@@ -182,7 +197,7 @@ async function resolvePreview(item) {
   // 1) iTunes
   try {
     const q = encodeURIComponent(`${item.artist} ${cleanTitle(item.title)}`);
-    const d = await jsonp(`${ITUNES}?term=${q}&media=music&entity=song&limit=6&country=IT`);
+    const d = await itunesGet(`${ITUNES}?term=${q}&media=music&entity=song&limit=6&country=IT`);
     const best = (d.results || []).filter(r => r.previewUrl).sort((a, b) => score(b) - score(a))[0];
     if (best && score(best) >= 4) {
       item.preview = best.previewUrl;
@@ -215,7 +230,7 @@ async function fetchArtistSongs(artistName) {
   const key = normalize(artistName);
   if (artistSongsCache[key]) return artistSongsCache[key];
   const q = encodeURIComponent(artistName);
-  const d = await jsonp(`${ITUNES}?term=${q}&media=music&entity=song&attribute=artistTerm&limit=200&country=IT`);
+  const d = await itunesGet(`${ITUNES}?term=${q}&media=music&entity=song&attribute=artistTerm&limit=200&country=IT`);
   const seen = new Set();
   const ta = normalize(artistName);
   let results = (d.results || []).filter(r => r.trackName);
@@ -244,7 +259,7 @@ async function fetchArtistSongs(artistName) {
 }
 
 async function searchArtists(term) {
-  const d = await jsonp(`${ITUNES}?term=${encodeURIComponent(term)}&media=music&entity=musicArtist&limit=8&country=IT`);
+  const d = await itunesGet(`${ITUNES}?term=${encodeURIComponent(term)}&media=music&entity=musicArtist&limit=8&country=IT`);
   const seen = new Set();
   return (d.results || [])
     .filter(r => { const k = normalize(r.artistName); if (!k || seen.has(k)) return false; seen.add(k); return true; })
