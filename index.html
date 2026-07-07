@@ -34,7 +34,7 @@
       </button>
       <button class="btn btn-glass" id="btn-howto">❓ Come si gioca</button>
     </div>
-    <p class="footer-note" id="version-note">v1.2 · funziona offline dopo la prima apertura</p>
+    <p class="footer-note" id="version-note">v1.3 · funziona offline dopo la prima apertura</p>
   </section>
 
   <!-- ============ SETUP ============ -->
@@ -101,6 +101,15 @@
           <button class="pill" data-timer="20">20</button>
           <button class="pill" data-timer="30">30</button>
         </div>
+      </div>
+
+      <div id="opts-audio" class="opt-group">
+        <h3 class="setup-label">🔊 Audio delle canzoni</h3>
+        <div class="pill-row" id="audio-pills">
+          <button class="pill selected" data-audio="preview">Anteprime 30s</button>
+          <button class="pill" data-audio="spotify">App Spotify 💚</button>
+        </div>
+        <p class="muted hidden" id="audio-hint" style="margin-top:8px">Canzoni intere riprodotte dall'app Spotify di questo telefono: servono <b>Spotify Premium</b> e l'app Spotify aperta di recente (se non parte, apri Spotify e avvia un brano qualsiasi).</p>
       </div>
 
       <!-- sorgente musica (quiz/write) -->
@@ -293,6 +302,7 @@
     <h2>💚 Collega Spotify</h2>
     <div id="spotify-connected-box" class="hidden">
       <p class="muted">Connesso come <b id="spotify-user-name"></b> ✅</p>
+      <button class="btn btn-primary hidden" id="btn-spotify-relink">🔄 Aggiorna permessi (audio Premium)</button>
       <button class="btn btn-glass" id="btn-spotify-logout">Disconnetti</button>
     </div>
     <div id="spotify-setup-box">
@@ -306,6 +316,8 @@
       <input type="text" id="client-id-input" placeholder="Incolla qui il Client ID…" autocomplete="off">
       <button class="btn btn-primary" id="btn-spotify-connect">Collega ora →</button>
     </div>
+    <button class="btn btn-glass" id="btn-diagnostics">🔧 Test connessione</button>
+    <div id="diag-results" class="howto-text"></div>
     <button class="btn btn-glass" data-close-modal>Chiudi</button>
   </div>
 </div>

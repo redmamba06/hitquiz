@@ -134,6 +134,7 @@ player.preload = 'auto';
 function stopMusic() {
   player.pause();
   player.src = '';
+  if (setup.audio === 'spotify' && game && game.usedSpotifyAudio) spotifyPause();
 }
 
 /* ============ JSONP + API musica (iTunes primario, Deezer fallback) ============ */
@@ -229,6 +230,19 @@ const artistSongsCache = {};
 async function fetchArtistSongs(artistName) {
   const key = normalize(artistName);
   if (artistSongsCache[key]) return artistSongsCache[key];
+  let songs = [];
+  try {
+    songs = await fetchArtistSongsItunes(artistName);
+  } catch {}
+  // fallback via Spotify quando iTunes non risponde o trova poco
+  if (songs.length < 5 && spotifyConnected()) {
+    try { songs = await spotifyArtistSongs(artistName); } catch {}
+  }
+  artistSongsCache[key] = songs;
+  return songs;
+}
+
+async function fetchArtistSongsItunes(artistName) {
   const q = encodeURIComponent(artistName);
   const d = await itunesGet(`${ITUNES}?term=${q}&media=music&entity=song&attribute=artistTerm&limit=200&country=IT`);
   const seen = new Set();
@@ -254,11 +268,19 @@ async function fetchArtistSongs(artistName) {
       seen.add(k);
       return true;
     });
-  artistSongsCache[key] = songs;
   return songs;
 }
 
 async function searchArtists(term) {
+  // se Spotify è collegato usalo per primo: su alcuni dispositivi iTunes è bloccato
+  if (spotifyConnected()) {
+    try {
+      const d = await spotifyApi(`/search?q=${encodeURIComponent(term)}&type=artist&limit=5`);
+      const arts = ((d.artists && d.artists.items) || [])
+        .map(a => ({ name: a.name, genre: (a.genres && a.genres[0]) || '' }));
+      if (arts.length) return arts;
+    } catch {}
+  }
   const d = await itunesGet(`${ITUNES}?term=${encodeURIComponent(term)}&media=music&entity=musicArtist&limit=8&country=IT`);
   const seen = new Set();
   return (d.results || [])
@@ -269,7 +291,9 @@ async function searchArtists(term) {
 
 /* ============ Spotify (OAuth PKCE, tutto client-side) ============ */
 
-const SPOTIFY_SCOPES = 'user-top-read user-library-read playlist-read-private playlist-read-collaborative';
+const SPOTIFY_SCOPES = 'user-top-read user-library-read playlist-read-private playlist-read-collaborative user-modify-playback-state user-read-playback-state';
+
+function spotifyHasCurrentScopes() { return store.get('gs_scopes', '') === SPOTIFY_SCOPES; }
 
 function spotifyRedirectUri() {
   return location.origin + location.pathname;
@@ -334,6 +358,7 @@ async function spotifyHandleRedirect() {
       redirect_uri: spotifyRedirectUri(),
       code_verifier: store.get('gs_pkce_verifier', '')
     });
+    store.set('gs_scopes', SPOTIFY_SCOPES);
     toast('Spotify collegato! 💚');
     sfx('correct');
   } catch {
@@ -380,8 +405,88 @@ function mapSpotifyTrack(t) {
     title: cleanTitle(t.name),
     artist: t.artists.map(a => a.name).slice(0, 2).join(', '),
     primaryArtist: t.artists[0].name,
-    art: (t.album && t.album.images && t.album.images[1] && t.album.images[1].url) || ''
+    art: (t.album && t.album.images && t.album.images[1] && t.album.images[1].url) || '',
+    uri: t.uri || null
   };
+}
+
+// chiamate con corpo (player Spotify Connect)
+async function spotifyApiSend(method, path, body) {
+  const token = await spotifyToken();
+  if (!token) throw new Error('not-connected');
+  const res = await fetch('https://api.spotify.com/v1' + path, {
+    method,
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  if (res.status === 429) { await new Promise(r => setTimeout(r, 1200)); return spotifyApiSend(method, path, body); }
+  if (!res.ok) { const e = new Error('api ' + res.status); e.status = res.status; throw e; }
+  return null;
+}
+
+// riproduzione tramite l'app Spotify (richiede Premium + un dispositivo attivo)
+async function spotifyPlay(uri) {
+  try {
+    await spotifyApiSend('PUT', '/me/player/play', { uris: [uri] });
+    return true;
+  } catch (e) {
+    if (e.status === 403) return 'premium'; // account non Premium
+    // nessun dispositivo attivo: prova a trasferire su uno disponibile
+    try {
+      const d = await spotifyApi('/me/player/devices');
+      const dev = (d.devices || []).find(x => !x.is_restricted);
+      if (dev) {
+        await spotifyApiSend('PUT', '/me/player/play?device_id=' + dev.id, { uris: [uri] });
+        return true;
+      }
+    } catch (e2) { if (e2.status === 403) return 'premium'; }
+    return false;
+  }
+}
+
+function spotifyPause() { spotifyApiSend('PUT', '/me/player/pause').catch(() => {}); }
+
+// trova l'uri Spotify di un brano proveniente da iTunes (per l'audio Premium)
+const uriCache = store.get('gs_uri_cache', {});
+async function resolveSpotifyUri(item) {
+  if (item.uri) return item;
+  const key = normalize(item.artist) + '|' + normalize(item.title);
+  if (uriCache[key]) { item.uri = uriCache[key]; return item; }
+  try {
+    const q = encodeURIComponent(`track:"${cleanTitle(item.title)}" artist:"${item.primaryArtist || item.artist}"`);
+    const d = await spotifyApi(`/search?q=${q}&type=track&limit=3`);
+    const found = (d.tracks && d.tracks.items) || [];
+    const best = found.find(t => isMatch(cleanTitle(t.name), item.title)) || found[0];
+    if (best) {
+      item.uri = best.uri;
+      if (!item.art) item.art = (best.album && best.album.images && best.album.images[1] && best.album.images[1].url) || '';
+      uriCache[key] = best.uri;
+      store.set('gs_uri_cache', uriCache);
+    }
+  } catch {}
+  return item;
+}
+
+// canzoni di un artista via Spotify (fallback quando iTunes non è raggiungibile);
+// da feb 2026 la ricerca restituisce max 10 risultati per pagina
+async function spotifyArtistSongs(artistName) {
+  const out = []; const seen = new Set(); const ta = normalize(artistName);
+  for (let offset = 0; offset < 50; offset += 10) {
+    const d = await spotifyApi(`/search?q=${encodeURIComponent(`artist:"${artistName}"`)}&type=track&limit=10&offset=${offset}`);
+    const found = (d.tracks && d.tracks.items) || [];
+    for (const t of found) {
+      const m = mapSpotifyTrack(t);
+      if (!m) continue;
+      const ra = normalize(m.primaryArtist);
+      if (ra !== ta && !ra.includes(ta) && !ta.includes(ra)) continue;
+      const k = normalize(m.title);
+      if (!k || seen.has(k)) continue;
+      seen.add(k);
+      out.push({ title: m.title, artist: m.artist, primaryArtist: m.primaryArtist, art: m.art, preview: null, uri: m.uri });
+    }
+    if (!d.tracks || !d.tracks.next) break;
+  }
+  return out;
 }
 
 // pool dai gusti: top brani (3 periodi) + preferiti
@@ -481,6 +586,7 @@ const setup = {
   target: 1000,
   timer: 15,
   source: 'famous',        // famous | spotify-top | spotify-playlist | artists
+  audio: store.get('gs_audio', 'preview'), // preview (30s gratis) | spotify (app Spotify, Premium)
   playlistId: null,
   customArtists: [],
   chainArtist: null,
@@ -524,6 +630,8 @@ function refreshSetupVisibility() {
   $('#opts-points').classList.toggle('hidden', isChain);
   $('#opts-timer').classList.toggle('hidden', isChain);
   $('#opts-source').classList.toggle('hidden', isChain);
+  $('#opts-audio').classList.toggle('hidden', isChain);
+  $('#audio-hint').classList.toggle('hidden', setup.audio !== 'spotify');
   $('#opts-chain').classList.toggle('hidden', !isChain);
   $('#playlist-picker').classList.toggle('hidden', setup.source !== 'spotify-playlist' || isChain);
   $('#artists-picker').classList.toggle('hidden', setup.source !== 'artists' || isChain);
@@ -655,6 +763,14 @@ async function startGame() {
   if (setup.source === 'spotify-top' && setup.mode !== 'chain' && !spotifyConnected()) { toast('Prima collega Spotify 💚'); return; }
   if (setup.source === 'spotify-playlist' && setup.mode !== 'chain' && !setup.playlistId) { toast('Scegli una playlist!'); return; }
   if (setup.source === 'artists' && setup.mode !== 'chain' && !setup.customArtists.length) { toast('Aggiungi almeno un artista!'); return; }
+  if (setup.audio === 'spotify' && setup.mode !== 'chain') {
+    if (!spotifyConnected()) { toast('Per l\'audio via app Spotify devi prima collegare Spotify 💚'); return; }
+    if (!spotifyHasCurrentScopes()) {
+      toast('Servono nuovi permessi Spotify: tocca "Aggiorna permessi" e ricollega', 4500);
+      refreshSpotifyUi(); openModal('#modal-spotify');
+      return;
+    }
+  }
 
   const btn = $('#btn-start-game');
   btn.disabled = true; btn.textContent = '⏳ Preparo la musica…';
@@ -726,8 +842,14 @@ async function pullNextTrack() {
     }
     const t = game.queue.shift();
     if (game.usedKeys.has(trackKey(t))) continue;
-    const ok = await resolvePreview(t);
-    if (ok && t.preview) {
+    let ok;
+    if (setup.audio === 'spotify') {
+      await resolveSpotifyUri(t);
+      ok = !!t.uri;
+    } else {
+      ok = (await resolvePreview(t)) && t.preview;
+    }
+    if (ok) {
       game.usedKeys.add(trackKey(t));
       return t;
     }
@@ -798,10 +920,25 @@ async function beginTurn() {
       : (guessKind === 'artist' ? 'Chi la canta? 🎤' : 'Che canzone è? 🎵');
 
   // audio
-  player.src = track.preview;
-  player.currentTime = 0;
-  player.volume = 1;
-  try { await player.play(); } catch {}
+  if (setup.audio === 'spotify') {
+    const res = await spotifyPlay(track.uri);
+    if (res !== true) {
+      toast(res === 'premium'
+        ? 'Questo account non è Premium: usa le anteprime 30s 🎧'
+        : 'Nessun dispositivo Spotify attivo: apri l\'app Spotify, avvia un brano qualsiasi e riprova', 5000);
+      // rimetti il brano in coda e torna alla schermata del turno
+      game.usedKeys.delete(trackKey(track));
+      game.queue.unshift(track);
+      show('screen-pass');
+      return;
+    }
+    game.usedSpotifyAudio = true;
+  } else {
+    player.src = track.preview;
+    player.currentTime = 0;
+    player.volume = 1;
+    try { await player.play(); } catch {}
+  }
   $('#vinyl').classList.add('spinning');
   $('#equalizer').classList.remove('paused');
 
@@ -957,7 +1094,10 @@ function finishTurn(ok, points) {
   }, ok || timeLeftFrac() > 0 ? 900 : 300);
 
   // prefetch del prossimo brano mentre si guarda il risultato
-  setTimeout(() => { if (game && game.queue[0]) resolvePreview(game.queue[0]); }, 1200);
+  setTimeout(() => {
+    if (!game || !game.queue[0]) return;
+    (setup.audio === 'spotify' ? resolveSpotifyUri(game.queue[0]) : resolvePreview(game.queue[0])).catch(() => {});
+  }, 1200);
 }
 
 /* ============ catena d'artista ============ */
@@ -1144,6 +1284,7 @@ async function refreshSpotifyUi() {
     label.textContent = 'Spotify collegato';
     $('#spotify-connected-box').classList.remove('hidden');
     $('#spotify-setup-box').classList.add('hidden');
+    $('#btn-spotify-relink').classList.toggle('hidden', spotifyHasCurrentScopes());
     try {
       const me = await spotifyApi('/me');
       $('#spotify-user-name').textContent = me.display_name || 'utente Spotify';
@@ -1158,6 +1299,58 @@ async function refreshSpotifyUi() {
     $('#spotify-setup-box').classList.remove('hidden');
     $('#client-id-input').value = store.get('gs_client_id', '');
   }
+}
+
+/* ============ diagnostica connessione ============ */
+
+async function runDiagnostics() {
+  const box = $('#diag-results');
+  const rows = [];
+  const render = () => { box.innerHTML = rows.map(r => `<p>${escapeHtml(r)}</p>`).join(''); };
+  rows.push('⏳ Test in corso…'); render();
+  rows.length = 0;
+
+  const test = async (name, fn) => {
+    try { const extra = await fn(); rows.push(`✅ ${name}${extra ? ' · ' + extra : ''}`); }
+    catch (e) { rows.push(`❌ ${name} · ${(e && (e.message || e.name)) || 'errore'}`); }
+    render();
+  };
+
+  await test('iTunes (diretta)', async () => {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 8000);
+    const res = await fetch(`${ITUNES}?term=queen&media=music&entity=musicArtist&limit=1&country=IT`, { signal: ctrl.signal });
+    clearTimeout(t);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const d = await res.json();
+    return d.resultCount + ' risultati';
+  });
+  await test('iTunes (script)', async () => {
+    const d = await jsonp(`${ITUNES}?term=queen&media=music&entity=musicArtist&limit=1&country=IT`, 8000);
+    return d.resultCount + ' risultati';
+  });
+  await test('Deezer (script)', async () => {
+    const d = await jsonp('https://api.deezer.com/search/artist?q=queen&limit=1&output=jsonp', 8000);
+    return ((d.data || []).length) + ' risultati';
+  });
+  if (spotifyConnected()) {
+    await test('API Spotify', async () => {
+      const me = await spotifyApi('/me');
+      return me.display_name || 'ok';
+    });
+    await test('Ricerca Spotify', async () => {
+      const d = await spotifyApi('/search?q=queen&type=artist&limit=1');
+      return ((d.artists && d.artists.items) || []).length + ' risultati';
+    });
+    await test('Dispositivi Spotify', async () => {
+      const d = await spotifyApi('/me/player/devices');
+      const devs = (d.devices || []).map(x => x.name + (x.is_active ? ' (attivo)' : ''));
+      return devs.length ? devs.join(', ') : 'nessuno — apri l\'app Spotify';
+    });
+  } else {
+    rows.push('⚪️ Spotify non collegato'); render();
+  }
+  rows.push('📋 Riporta questi risultati se qualcosa non va!'); render();
 }
 
 /* ============ eventi / init ============ */
@@ -1211,6 +1404,13 @@ function bindEvents() {
     setup.timer = +p.dataset.timer;
     $$('#timer-pills .pill').forEach(x => x.classList.toggle('selected', x === p));
   });
+  $('#audio-pills').addEventListener('click', e => {
+    const p = e.target.closest('.pill'); if (!p) return;
+    setup.audio = p.dataset.audio;
+    store.set('gs_audio', setup.audio);
+    $$('#audio-pills .pill').forEach(x => x.classList.toggle('selected', x === p));
+    $('#audio-hint').classList.toggle('hidden', setup.audio !== 'spotify');
+  });
   $('#chain-timer-pills').addEventListener('click', e => {
     const p = e.target.closest('.pill'); if (!p) return;
     setup.chainTimer = +p.dataset.ctimer;
@@ -1252,6 +1452,8 @@ function bindEvents() {
 
   // spotify
   $('#btn-spotify-connect').onclick = spotifyLogin;
+  $('#btn-spotify-relink').onclick = spotifyLogin;
+  $('#btn-diagnostics').onclick = runDiagnostics;
   $('#btn-spotify-logout').onclick = () => { store.del('gs_sp_tokens'); refreshSpotifyUi(); toast('Spotify disconnesso'); };
   $('#redirect-uri-box').onclick = () => {
     navigator.clipboard && navigator.clipboard.writeText(spotifyRedirectUri()).then(() => toast('Redirect URI copiato! 📋')).catch(() => {});
@@ -1262,6 +1464,8 @@ async function init() {
   $('#redirect-uri-box').textContent = spotifyRedirectUri();
   bindEvents();
   renderPlayers();
+  // allinea la pillola audio all'ultima scelta salvata
+  $$('#audio-pills .pill').forEach(p => p.classList.toggle('selected', p.dataset.audio === setup.audio));
   refreshSetupVisibility();
   await spotifyHandleRedirect();
   refreshSpotifyUi();
