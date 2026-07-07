@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>HitQuiz — Indovina la canzone</title>
+<meta name="description" content="Il party game musicale: indovina la canzone con gli amici!">
+<meta name="theme-color" content="#0f0a1e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="HitQuiz">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./icon-512.png">
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ============ HOME ============ -->
+  <section class="screen active" id="screen-home">
+    <div class="home-hero">
+      <div class="logo-disc">🎵</div>
+      <h1 class="logo-title">Hit<span>Quiz</span></h1>
+      <p class="tagline">Indovina la canzone, sfida i tuoi amici!</p>
+    </div>
+    <div class="home-buttons">
+      <button class="btn btn-primary btn-big" id="btn-play">▶ &nbsp;Gioca</button>
+      <button class="btn btn-glass" id="btn-spotify-home">
+        <span class="spotify-dot" id="spotify-dot"></span>
+        <span id="spotify-home-label">Collega Spotify</span>
+      </button>
+      <button class="btn btn-glass" id="btn-howto">❓ Come si gioca</button>
+    </div>
+    <p class="footer-note" id="version-note">v1.0 · funziona offline dopo la prima apertura</p>
+  </section>
+
+  <!-- ============ SETUP ============ -->
+  <section class="screen" id="screen-setup">
+    <header class="topbar">
+      <button class="btn-icon" data-back="screen-home">←</button>
+      <h2>Nuova partita</h2>
+      <span></span>
+    </header>
+
+    <div class="setup-scroll">
+
+      <h3 class="setup-label">👥 Giocatori</h3>
+      <div id="players-list" class="players-list"></div>
+      <div class="add-player-row">
+        <input type="text" id="new-player-name" placeholder="Nome giocatore…" maxlength="14" autocomplete="off" enterkeyhint="done">
+        <button class="btn btn-small btn-primary" id="btn-add-player">+ Aggiungi</button>
+      </div>
+
+      <h3 class="setup-label">🎮 Modalità</h3>
+      <div class="mode-cards" id="mode-cards">
+        <button class="mode-card selected" data-mode="quiz">
+          <span class="mode-emoji">🔠</span>
+          <span class="mode-name">Quiz 4 opzioni</span>
+          <span class="mode-desc">Ascolta e scegli la risposta giusta tra 4</span>
+        </button>
+        <button class="mode-card" data-mode="write">
+          <span class="mode-emoji">⌨️</span>
+          <span class="mode-name">Scrivila!</span>
+          <span class="mode-desc">Ascolta e scrivi titolo o artista</span>
+        </button>
+        <button class="mode-card" data-mode="chain">
+          <span class="mode-emoji">🔗</span>
+          <span class="mode-name">Catena d'artista</span>
+          <span class="mode-desc">A turno nomina canzoni di un artista: chi si blocca è fuori!</span>
+        </button>
+      </div>
+
+      <!-- opzioni quiz/write -->
+      <div id="opts-guess" class="opt-group">
+        <h3 class="setup-label">🎯 Cosa bisogna indovinare?</h3>
+        <div class="pill-row" id="guess-pills">
+          <button class="pill selected" data-guess="title">Titolo</button>
+          <button class="pill" data-guess="artist">Artista</button>
+          <button class="pill" data-guess="either">Uno dei due</button>
+        </div>
+      </div>
+
+      <div id="opts-points" class="opt-group">
+        <h3 class="setup-label">🏆 Punti per vincere</h3>
+        <div class="pill-row" id="target-pills">
+          <button class="pill" data-target="500">500</button>
+          <button class="pill selected" data-target="1000">1000</button>
+          <button class="pill" data-target="1500">1500</button>
+          <button class="pill" data-target="2500">2500</button>
+        </div>
+      </div>
+
+      <div id="opts-timer" class="opt-group">
+        <h3 class="setup-label">⏱ Secondi per rispondere</h3>
+        <div class="pill-row" id="timer-pills">
+          <button class="pill" data-timer="10">10</button>
+          <button class="pill selected" data-timer="15">15</button>
+          <button class="pill" data-timer="20">20</button>
+          <button class="pill" data-timer="30">30</button>
+        </div>
+      </div>
+
+      <!-- sorgente musica (quiz/write) -->
+      <div id="opts-source" class="opt-group">
+        <h3 class="setup-label">🎧 Da dove peschiamo le canzoni?</h3>
+        <div class="source-cards" id="source-cards">
+          <button class="source-card selected" data-source="famous">
+            <span class="mode-emoji">🌟</span><span class="mode-name">Mix di hit famose</span>
+            <span class="mode-desc">Grandi successi italiani e internazionali</span>
+          </button>
+          <button class="source-card" data-source="spotify-top">
+            <span class="mode-emoji">💚</span><span class="mode-name">I miei gusti Spotify</span>
+            <span class="mode-desc">I brani che ascolti di più + preferiti</span>
+          </button>
+          <button class="source-card" data-source="spotify-playlist">
+            <span class="mode-emoji">📻</span><span class="mode-name">Una mia playlist</span>
+            <span class="mode-desc">Scegli una playlist dal tuo Spotify</span>
+          </button>
+          <button class="source-card" data-source="artists">
+            <span class="mode-emoji">🎤</span><span class="mode-name">Artisti a scelta</span>
+            <span class="mode-desc">Scegliete voi gli artisti del quiz</span>
+          </button>
+        </div>
+        <div id="playlist-picker" class="hidden">
+          <div id="playlist-list" class="playlist-list"><p class="muted">Caricamento playlist…</p></div>
+        </div>
+        <div id="artists-picker" class="hidden">
+          <div class="add-player-row">
+            <input type="text" id="artist-search-input" placeholder="Cerca artista… (es. Måneskin)" autocomplete="off" enterkeyhint="search">
+            <button class="btn btn-small btn-primary" id="btn-add-artist">Cerca</button>
+          </div>
+          <div id="chosen-artists" class="chips-row"></div>
+        </div>
+      </div>
+
+      <!-- artista per catena -->
+      <div id="opts-chain" class="opt-group hidden">
+        <h3 class="setup-label">🎤 Artista della sfida</h3>
+        <div class="add-player-row">
+          <input type="text" id="chain-artist-input" placeholder="Cerca artista… (es. Vasco Rossi)" autocomplete="off" enterkeyhint="search">
+          <button class="btn btn-small btn-primary" id="btn-chain-search">Cerca</button>
+        </div>
+        <div id="chain-artist-results" class="playlist-list"></div>
+        <div id="chain-artist-chosen" class="chips-row"></div>
+        <h3 class="setup-label">⏱ Secondi per turno</h3>
+        <div class="pill-row" id="chain-timer-pills">
+          <button class="pill" data-ctimer="15">15</button>
+          <button class="pill selected" data-ctimer="30">30</button>
+          <button class="pill" data-ctimer="45">45</button>
+        </div>
+      </div>
+
+      <button class="btn btn-primary btn-big" id="btn-start-game">🚀 Inizia partita!</button>
+      <div style="height:24px"></div>
+    </div>
+  </section>
+
+  <!-- ============ PASSA IL TELEFONO ============ -->
+  <section class="screen" id="screen-pass">
+    <header class="topbar">
+      <button class="btn-icon" id="btn-quit-1">✕</button>
+      <h2 id="pass-round">Round 1</h2>
+      <button class="btn-icon" id="btn-scores-1">🏆</button>
+    </header>
+    <div class="pass-content">
+      <p class="pass-label">Passa il telefono a…</p>
+      <div class="pass-avatar" id="pass-avatar">🦊</div>
+      <h1 class="pass-name" id="pass-name">Giocatore</h1>
+      <p class="pass-score" id="pass-score">0 punti</p>
+      <button class="btn btn-primary btn-big pulse" id="btn-ready">Sono pronto! 🎧</button>
+    </div>
+  </section>
+
+  <!-- ============ GIOCO QUIZ / SCRITTURA ============ -->
+  <section class="screen" id="screen-game">
+    <header class="topbar">
+      <button class="btn-icon" id="btn-quit-2">✕</button>
+      <div class="turn-indicator"><span id="game-player-emoji">🦊</span> <span id="game-player-name"></span></div>
+      <button class="btn-icon" id="btn-scores-2">🏆</button>
+    </header>
+
+    <div class="timerbar-wrap"><div class="timerbar" id="timerbar"></div></div>
+
+    <div class="game-content">
+      <div class="vinyl-zone" id="vinyl-zone">
+        <div class="vinyl spinning" id="vinyl"><div class="vinyl-center">🎵</div></div>
+        <div class="equalizer" id="equalizer"><i></i><i></i><i></i><i></i><i></i></div>
+        <p class="game-question" id="game-question">Che canzone è?</p>
+      </div>
+
+      <div id="loading-track" class="loading-track hidden"><div class="spinner"></div><p>Carico la canzone…</p></div>
+
+      <div id="answers-quiz" class="answers-quiz hidden"></div>
+
+      <div id="answers-write" class="answers-write hidden">
+        <input type="text" id="write-input" placeholder="Scrivi qui la risposta…" autocomplete="off" autocorrect="off" autocapitalize="off" enterkeyhint="send">
+        <div class="write-btns">
+          <button class="btn btn-glass" id="btn-write-skip">Non lo so 🤷</button>
+          <button class="btn btn-primary" id="btn-write-submit">Conferma ✓</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- risultato turno -->
+    <div class="result-overlay hidden" id="result-overlay">
+      <div class="result-card" id="result-card">
+        <div class="result-verdict" id="result-verdict">✅ Giusto!</div>
+        <img class="result-art" id="result-art" alt="" src="">
+        <div class="result-title" id="result-title"></div>
+        <div class="result-artist" id="result-artist"></div>
+        <div class="result-points" id="result-points">+150 punti</div>
+        <button class="btn btn-primary btn-big" id="btn-next-turn">Avanti →</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CATENA ============ -->
+  <section class="screen" id="screen-chain">
+    <header class="topbar">
+      <button class="btn-icon" id="btn-quit-3">✕</button>
+      <div class="turn-indicator">🔗 <span id="chain-artist-name"></span></div>
+      <span class="chain-count" id="chain-count">0 🎵</span>
+    </header>
+
+    <div class="timerbar-wrap"><div class="timerbar" id="chain-timerbar"></div></div>
+
+    <div class="game-content">
+      <div class="chain-turn">
+        <span class="chain-turn-avatar" id="chain-turn-avatar">🦊</span>
+        <span>Tocca a <b id="chain-turn-name"></b>!</span>
+      </div>
+      <p class="chain-hint">Nomina una canzone di <b id="chain-artist-name-2"></b> che non è ancora uscita</p>
+      <div class="answers-write">
+        <input type="text" id="chain-input" placeholder="Titolo della canzone…" autocomplete="off" autocorrect="off" autocapitalize="off" enterkeyhint="send">
+        <div class="write-btns">
+          <button class="btn btn-glass" id="btn-chain-giveup">Mi arrendo 🏳️</button>
+          <button class="btn btn-primary" id="btn-chain-submit">Conferma ✓</button>
+        </div>
+      </div>
+      <p class="chain-feedback" id="chain-feedback"></p>
+      <div class="chain-used" id="chain-used"></div>
+      <div class="chain-players" id="chain-players"></div>
+    </div>
+  </section>
+
+  <!-- ============ VINCITORE ============ -->
+  <section class="screen" id="screen-winner">
+    <canvas id="confetti-canvas"></canvas>
+    <div class="winner-content">
+      <p class="winner-label">🏆 Vince…</p>
+      <div class="winner-avatar" id="winner-avatar">🦊</div>
+      <h1 class="winner-name" id="winner-name"></h1>
+      <p class="winner-points" id="winner-points"></p>
+      <div class="podium" id="podium"></div>
+      <div class="home-buttons">
+        <button class="btn btn-primary btn-big" id="btn-rematch">🔄 Rivincita!</button>
+        <button class="btn btn-glass" id="btn-new-game">Nuova partita</button>
+        <button class="btn btn-glass" id="btn-go-home">🏠 Home</button>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<!-- ============ MODALI ============ -->
+<div class="modal-backdrop hidden" id="modal-scores">
+  <div class="modal">
+    <h2>🏆 Classifica</h2>
+    <div id="scores-table"></div>
+    <button class="btn btn-glass" data-close-modal>Chiudi</button>
+  </div>
+</div>
+
+<div class="modal-backdrop hidden" id="modal-howto">
+  <div class="modal">
+    <h2>❓ Come si gioca</h2>
+    <div class="howto-text">
+      <p><b>🔠 Quiz 4 opzioni</b> — A turno parte una canzone: hai pochi secondi per scegliere la risposta giusta tra 4. Più sei veloce, più punti fai! Vince chi arriva per primo ai punti stabiliti.</p>
+      <p><b>⌨️ Scrivila!</b> — Come il quiz, ma la risposta la scrivi tu. Non serve essere perfetti: maiuscole, accenti e piccoli errori di battitura sono perdonati. 😉</p>
+      <p><b>🔗 Catena d'artista</b> — Scegliete un artista. A turno ognuno nomina una sua canzone (vera e non già detta!). Chi si blocca o sbaglia allo scadere del tempo è eliminato. Vince l'ultimo che resta.</p>
+      <p><b>💚 Spotify</b> — Collega il tuo account per quiz basati sui tuoi brani più ascoltati, i preferiti o le tue playlist. La musica viene riprodotta con estratti gratuiti di 30 secondi: non serve Spotify Premium!</p>
+      <p><b>🔥 Bonus serie</b> — Indovina più volte di fila per punti extra!</p>
+    </div>
+    <button class="btn btn-glass" data-close-modal>Chiudi</button>
+  </div>
+</div>
+
+<div class="modal-backdrop hidden" id="modal-spotify">
+  <div class="modal">
+    <h2>💚 Collega Spotify</h2>
+    <div id="spotify-connected-box" class="hidden">
+      <p class="muted">Connesso come <b id="spotify-user-name"></b> ✅</p>
+      <button class="btn btn-glass" id="btn-spotify-logout">Disconnetti</button>
+    </div>
+    <div id="spotify-setup-box">
+      <div class="howto-text">
+        <p>Per collegare Spotify serve una configurazione una tantum (2 minuti, gratis):</p>
+        <p>1. Vai su <b>developer.spotify.com/dashboard</b> e accedi col tuo account Spotify.</p>
+        <p>2. Premi <b>Create app</b>: dai un nome qualsiasi (es. "HitQuiz") e come <b>Redirect URI</b> incolla esattamente:</p>
+        <p class="code-box" id="redirect-uri-box">…</p>
+        <p>3. Seleziona <b>Web API</b>, salva, apri l'app e copia il <b>Client ID</b> qui sotto:</p>
+      </div>
+      <input type="text" id="client-id-input" placeholder="Incolla qui il Client ID…" autocomplete="off">
+      <button class="btn btn-primary" id="btn-spotify-connect">Collega ora →</button>
+    </div>
+    <button class="btn btn-glass" data-close-modal>Chiudi</button>
+  </div>
+</div>
+
+<div class="modal-backdrop hidden" id="modal-quit">
+  <div class="modal">
+    <h2>Uscire dalla partita?</h2>
+    <p class="muted">I punteggi andranno persi.</p>
+    <button class="btn btn-primary" id="btn-quit-confirm">Sì, esci</button>
+    <button class="btn btn-glass" data-close-modal>No, continua</button>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="./app.js"></script>
+</body>
+</html>
