@@ -396,30 +396,55 @@ async function loadSpotifyTastePool() {
 }
 
 async function loadSpotifyPlaylists() {
+  // da febbraio 2026 l'API restituisce i contenuti solo delle playlist di cui
+  // l'utente è proprietario o collaboratore; le altre vanno mostrate come non usabili
+  let myId = null;
+  try { myId = (await spotifyApi('/me')).id; } catch {}
   const d = await spotifyApi('/me/playlists?limit=50');
-  return (d.items || []).filter(Boolean).map(p => ({
-    id: p.id, name: p.name,
-    count: p.tracks ? p.tracks.total : 0,
-    img: (p.images && p.images[0] && p.images[0].url) || ''
-  }));
+  return (d.items || []).filter(Boolean).map(p => {
+    const paging = p.items || p.tracks; // "tracks" rinominato in "items" (feb 2026)
+    return {
+      id: p.id, name: p.name,
+      count: paging && typeof paging.total === 'number' ? paging.total : null,
+      img: (p.images && p.images[0] && p.images[0].url) || '',
+      readable: !myId || !p.owner || p.owner.id === myId || !!p.collaborative
+    };
+  });
 }
 
 async function loadSpotifyPlaylistTracks(id) {
   const seen = new Set(); const pool = [];
-  for (const offset of [0, 100]) {
-    try {
-      const d = await spotifyApi(`/playlists/${id}/tracks?limit=100&offset=${offset}`);
-      for (const it of (d.items || [])) {
-        const t = mapSpotifyTrack(it.track);
-        if (!t) continue;
-        const k = normalize(t.primaryArtist) + '|' + normalize(t.title);
-        if (seen.has(k)) continue;
-        seen.add(k);
-        pool.push(t);
-      }
+  const collect = (d) => {
+    let added = 0;
+    for (const it of (d.items || [])) {
+      // nuovo formato: il brano è sotto "item"; vecchio formato: sotto "track"
+      const t = mapSpotifyTrack(it.item || it.track || it);
+      if (!t) continue;
+      const k = normalize(t.primaryArtist) + '|' + normalize(t.title);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      pool.push(t);
+      added++;
+    }
+    return added;
+  };
+  // endpoint nuovo (feb 2026), max 50 per pagina
+  try {
+    for (let offset = 0; offset < 200; offset += 50) {
+      const d = await spotifyApi(`/playlists/${id}/items?limit=50&offset=${offset}`);
+      collect(d);
       if (!d.next) break;
-    } catch { break; }
-  }
+    }
+    if (pool.length) return pool;
+  } catch {}
+  // fallback: endpoint storico per le app create prima del cambio API
+  try {
+    for (const offset of [0, 100]) {
+      const d = await spotifyApi(`/playlists/${id}/tracks?limit=100&offset=${offset}`);
+      collect(d);
+      if (!d.next) break;
+    }
+  } catch {}
   return pool;
 }
 
@@ -529,12 +554,18 @@ async function showPlaylistPicker() {
   try {
     const pls = await loadSpotifyPlaylists();
     if (!pls.length) { box.innerHTML = '<p class="muted">Nessuna playlist trovata</p>'; return; }
-    box.innerHTML = pls.map(p => `
-      <button class="playlist-item ${setup.playlistId === p.id ? 'selected' : ''}" data-pl="${p.id}">
+    const readable = pls.filter(p => p.readable);
+    const locked = pls.filter(p => !p.readable);
+    const row = (p, dis) => `
+      <button class="playlist-item ${setup.playlistId === p.id ? 'selected' : ''}" data-pl="${p.id}" ${dis ? 'disabled style="opacity:.4"' : ''}>
         ${p.img ? `<img src="${p.img}" alt="">` : '<img alt="">'}
-        <span><span class="pl-name">${escapeHtml(p.name)}</span><br><span class="pl-sub">${p.count} brani</span></span>
-      </button>`).join('');
-    box.querySelectorAll('[data-pl]').forEach(b => b.onclick = () => {
+        <span><span class="pl-name">${escapeHtml(p.name)}</span><br><span class="pl-sub">${dis ? '🔒 non leggibile (limite Spotify)' : (p.count != null ? p.count + ' brani' : 'playlist')}</span></span>
+      </button>`;
+    box.innerHTML =
+      (readable.length ? '' : '<p class="muted">Spotify permette di leggere solo le playlist create da te 😕</p>') +
+      readable.map(p => row(p, false)).join('') +
+      (locked.length ? '<p class="muted" style="margin-top:6px">Le playlist che segui (non tue) non sono leggibili con le nuove regole Spotify:</p>' + locked.map(p => row(p, true)).join('') : '');
+    box.querySelectorAll('[data-pl]:not([disabled])').forEach(b => b.onclick = () => {
       setup.playlistId = b.dataset.pl;
       box.querySelectorAll('.playlist-item').forEach(x => x.classList.toggle('selected', x === b));
     });
