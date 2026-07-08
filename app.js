@@ -2026,6 +2026,14 @@ async function init() {
   await spotifyHandleRedirect();
   refreshSpotifyUi();
 
+  // multiplayer online
+  if (window.bindOnlineEvents) bindOnlineEvents();
+  const nameInput = $('#online-name-input');
+  if (nameInput) nameInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { const b = $('#btn-online-create'); if (b && !b.classList.contains('hidden')) b.click(); }
+  });
+  if (window.handleRoomLink) handleRoomLink(); // gestisce ?room=CODICE
+
   // service worker (installabilità PWA) — non in locale, per evitare cache in sviluppo
   if ('serviceWorker' in navigator && !['localhost', '127.0.0.1'].includes(location.hostname)) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});

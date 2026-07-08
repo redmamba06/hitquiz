@@ -27,14 +27,60 @@
       <p class="tagline">Indovina la canzone, sfida i tuoi amici!</p>
     </div>
     <div class="home-buttons">
-      <button class="btn btn-primary btn-big" id="btn-play">▶ &nbsp;Gioca</button>
+      <button class="btn btn-primary btn-big" id="btn-play">▶ &nbsp;Gioca (stesso telefono)</button>
+      <button class="btn btn-glass btn-big" id="btn-online-home">🌐 Gioca online con gli amici</button>
       <button class="btn btn-glass" id="btn-spotify-home">
         <span class="spotify-dot" id="spotify-dot"></span>
         <span id="spotify-home-label">Collega Spotify</span>
       </button>
       <button class="btn btn-glass" id="btn-howto">❓ Come si gioca</button>
     </div>
-    <p class="footer-note" id="version-note">v1.8 · funziona offline dopo la prima apertura</p>
+    <p class="footer-note" id="version-note">v1.9 · gioco online in versione beta 🌐</p>
+  </section>
+
+  <!-- ============ ONLINE: HOME ============ -->
+  <section class="screen" id="screen-online-home">
+    <header class="topbar">
+      <button class="btn-icon" data-back="screen-home">←</button>
+      <h2 id="online-home-title">Gioca online</h2>
+      <button class="btn-icon" id="btn-online-config-open">⚙️</button>
+    </header>
+    <div class="setup-scroll">
+      <p class="muted" style="margin:6px 0 18px">Ognuno gioca dal proprio telefono. Crea una stanza e manda il link agli amici, oppure entra con un link ricevuto.</p>
+
+      <div id="online-config-warn" class="hidden">
+        <div class="warn-box">⚙️ Prima serve una configurazione una tantum del database (gratis). Tocca l'ingranaggio in alto a destra.</div>
+      </div>
+
+      <h3 class="setup-label">Il tuo nome</h3>
+      <input type="text" id="online-name-input" placeholder="Come ti chiami?" maxlength="14" autocomplete="off" enterkeyhint="done">
+
+      <button class="btn btn-primary btn-big" id="btn-online-create" style="margin-top:22px">➕ Crea una stanza</button>
+      <button class="btn btn-primary btn-big hidden" id="btn-online-join-confirm" style="margin-top:22px">🚪 Entra nella stanza</button>
+    </div>
+  </section>
+
+  <!-- ============ LOBBY ============ -->
+  <section class="screen" id="screen-lobby">
+    <header class="topbar">
+      <button class="btn-icon" id="btn-lobby-leave">←</button>
+      <h2>Stanza di gioco</h2>
+      <span></span>
+    </header>
+    <div class="setup-scroll">
+      <div class="lobby-code-card">
+        <p class="muted">Codice stanza</p>
+        <div class="lobby-code" id="lobby-code">····</div>
+        <p class="lobby-link" id="lobby-link">link…</p>
+        <button class="btn btn-primary" id="btn-lobby-share">📤 Condividi il link</button>
+      </div>
+
+      <h3 class="setup-label" id="lobby-count">Giocatori</h3>
+      <div id="lobby-players" class="players-list"></div>
+
+      <p class="muted hidden" id="lobby-host-hint" style="margin-top:16px">In attesa che l'host avvii la partita…</p>
+      <button class="btn btn-primary btn-big" id="btn-lobby-start" style="margin-top:22px">🚀 Avvia la partita</button>
+    </div>
   </section>
 
   <!-- ============ SETUP ============ -->
@@ -415,6 +461,35 @@
   </div>
 </div>
 
+<div class="modal-backdrop hidden" id="modal-online-config">
+  <div class="modal">
+    <h2>🌐 Configura il gioco online</h2>
+    <div id="online-ready-box" class="hidden">
+      <p class="muted">Database collegato ✅</p>
+      <p class="code-box" id="fb-url-current">—</p>
+      <button class="btn btn-glass" id="btn-fb-test">🔧 Prova connessione</button>
+      <div id="online-test-result" class="howto-text"></div>
+      <button class="btn btn-glass" id="btn-fb-reset">Rimuovi configurazione</button>
+    </div>
+    <div id="online-config-box">
+      <div class="howto-text">
+        <p>Per giocare online serve un database gratuito (Firebase). Setup una tantum, ~5 minuti:</p>
+        <p>1. Vai su <b>console.firebase.google.com</b> e accedi col tuo account Google.</p>
+        <p>2. <b>Add project</b> → dai un nome (es. "HitQuiz") → puoi saltare Google Analytics → crea.</p>
+        <p>3. Nel menù a sinistra: <b>Build → Realtime Database → Create Database</b>. Scegli una zona (es. Europe) e avvia in <b>test mode</b>.</p>
+        <p>4. Vai nella scheda <b>Rules</b> del database e incolla queste regole, poi <b>Publish</b>:</p>
+        <p class="code-box" id="fb-rules-box"></p>
+        <p>5. Nella scheda <b>Data</b> copia l'URL in alto (finisce con <i>firebasedatabase.app</i> o <i>firebaseio.com</i>) e incollalo qui:</p>
+      </div>
+      <input type="text" id="fb-config-input" placeholder="Incolla qui l'URL del database…" autocomplete="off">
+      <button class="btn btn-primary" id="btn-fb-save">Salva e collega →</button>
+      <div id="online-test-result-2" class="howto-text"></div>
+    </div>
+    <button class="btn btn-primary" id="btn-fb-config-done">Fatto</button>
+    <button class="btn btn-glass" data-close-modal>Chiudi</button>
+  </div>
+</div>
+
 <div class="modal-backdrop hidden" id="modal-quit">
   <div class="modal">
     <h2>Uscire dalla partita?</h2>
@@ -426,6 +501,8 @@
 
 <div id="toast" class="toast hidden"></div>
 
+<script src="./net.js"></script>
+<script src="./online.js"></script>
 <script src="./app.js"></script>
 </body>
 </html>

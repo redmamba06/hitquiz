@@ -1,5 +1,5 @@
 /* HitQuiz service worker — network-first con fallback alla cache */
-const CACHE = 'hitquiz-v1';
+const CACHE = 'hitquiz-v2';
 
 self.addEventListener('install', () => self.skipWaiting());
 

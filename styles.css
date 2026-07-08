@@ -351,6 +351,29 @@ input::placeholder { color: var(--muted); }
 .scores-row .sc-pts { margin-left: auto; color: var(--gold); }
 .scores-row .sc-streak { font-size: 13px; color: var(--accent2); }
 
+/* ---------- online / lobby ---------- */
+.warn-box {
+  background: rgba(251,191,36,.14); border: 1px solid rgba(251,191,36,.4);
+  color: #fde68a; border-radius: 14px; padding: 12px 14px; font-size: 14px; line-height: 1.45;
+}
+.lobby-code-card {
+  background: var(--card); border: 1px solid var(--card-border); border-radius: 20px;
+  padding: 20px; text-align: center; display: flex; flex-direction: column; gap: 10px; align-items: center;
+}
+.lobby-code {
+  font-size: 46px; font-weight: 900; letter-spacing: 8px; padding-left: 8px;
+  background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.lobby-link {
+  font-size: 13px; color: var(--muted); word-break: break-all;
+  background: rgba(0,0,0,.3); padding: 8px 12px; border-radius: 10px; cursor: pointer;
+  user-select: all; -webkit-user-select: all;
+}
+.player-row .chip {
+  background: rgba(251,191,36,.2); border: 1px solid var(--gold); color: var(--gold);
+  font-size: 12px; padding: 3px 10px; border-radius: 999px;
+}
+
 /* ---------- toast ---------- */
 .toast {
   position: fixed; left: 50%; bottom: calc(30px + var(--safe-bottom)); transform: translateX(-50%);
