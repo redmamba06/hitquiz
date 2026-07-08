@@ -24,6 +24,15 @@ const FAMOUS_ARTISTS = [
   'Guns N\' Roses','Madonna','Elton John','U2','Sia','Miley Cyrus','Sabrina Carpenter'
 ];
 
+const GENRES = {
+  'rap-ita': { label: '🇮🇹 Rap/Trap ITA', artists: ['Sfera Ebbasta', 'Lazza', 'Geolier', 'Marracash', 'Guè', 'Tedua', 'Capo Plaza', 'Shiva', 'Emis Killa', 'Salmo', 'Fabri Fibra', 'Rkomi', 'Ernia', 'Tony Effe', 'Anna', 'Noyz Narcos', 'Luchè', 'Paky'] },
+  'pop-ita': { label: '🇮🇹 Pop ITA', artists: ['Annalisa', 'Elodie', 'Mahmood', 'Blanco', 'Ultimo', 'Tiziano Ferro', 'Giorgia', 'Alessandra Amoroso', 'Marco Mengoni', 'Fedez', 'Achille Lauro', 'Rose Villain', 'Tananai', 'Irama', 'The Kolors', 'Elisa', 'Jovanotti', 'Takagi & Ketra'] },
+  'pop-int': { label: '🌍 Pop internazionale', artists: ['Taylor Swift', 'Dua Lipa', 'Ed Sheeran', 'Ariana Grande', 'Justin Bieber', 'Miley Cyrus', 'Rihanna', 'Katy Perry', 'Lady Gaga', 'Bruno Mars', 'The Weeknd', 'Sia', 'Charlie Puth', 'Shawn Mendes', 'Selena Gomez', 'Sabrina Carpenter'] },
+  'hiphop': { label: '🇺🇸 Hip-Hop/R&B', artists: ['Drake', 'Eminem', 'Nicki Minaj', 'Travis Scott', 'Kendrick Lamar', 'Post Malone', 'Cardi B', '21 Savage', 'Future', 'Kanye West', 'SZA', 'Chris Brown', 'Lil Wayne', 'Snoop Dogg', '50 Cent', 'Beyoncé'] },
+  'latin': { label: '🌴 Latin/Reggaeton', artists: ['Bad Bunny', 'J Balvin', 'Karol G', 'Maluma', 'Daddy Yankee', 'Ozuna', 'Shakira', 'Rosalía', 'Rauw Alejandro', 'Anuel AA', 'Nicky Jam', 'Feid', 'Peso Pluma', 'Becky G'] },
+  'dance': { label: '🎛 Dance/EDM', artists: ['David Guetta', 'Calvin Harris', 'Avicii', 'Marshmello', 'The Chainsmokers', 'Kygo', 'Martin Garrix', 'Tiësto', 'Alan Walker', 'Zedd', 'Major Lazer', 'DJ Snake', 'Swedish House Mafia', 'Bob Sinclar'] }
+};
+
 /* ============ utilità testo / matching ============ */
 
 function normalize(s) {
@@ -197,6 +206,7 @@ async function deezerArtistSongs(artistName) {
       seen.add(k);
       out.push({
         title: cleanTitle(t.title),
+        rawTitle: t.title,
         artist: t.artist.name,
         primaryArtist: t.artist.name,
         preview: t.preview || null,
@@ -319,7 +329,9 @@ async function fetchArtistSongsItunes(artistName) {
     })
     .map(r => ({
       title: cleanTitle(r.trackName),
+      rawTitle: r.trackName,
       artist: r.artistName,
+      primaryArtist: r.artistName,
       preview: r.previewUrl || null,
       art: (r.artworkUrl100 || '').replace('100x100', '300x300')
     }))
@@ -352,6 +364,63 @@ async function searchArtists(term) {
     if (arts.length) return arts;
   } catch {}
   return deezerSearchArtists(term);
+}
+
+/* ============ collaborazioni (Duello Feat) ============ */
+
+// confronto "morbido": minuscole e accenti, ma SENZA togliere le parentesi
+// (i "feat. X" vivono lì dentro)
+const soft = (x) => (x || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+
+// estrae i nomi dopo feat./ft./with/con nel titolo originale
+function parseFeatArtists(rawTitle) {
+  const m = (rawTitle || '').match(/[\(\[\s\-–]+(?:feat|ft|with|con)\.?\s+([^\)\]\-–]+)/i);
+  if (!m) return [];
+  return m[1].split(/,|&| e | x | y /i).map(s => s.trim()).filter(s => s && s.length > 1);
+}
+
+// dai brani di un pool ricava le coppie di artisti che hanno collaborato
+function collabsFromTracks(tracks) {
+  const pairs = new Map();
+  for (const t of tracks) {
+    let names = t.artists ? [...t.artists]
+      : String(t.artist || '').split(/,|&|\bfeat\.?\b|\bft\.?\b/i).map(s => s.trim());
+    names = names.concat(parseFeatArtists(t.rawTitle || t.title));
+    // dedup mantenendo l'ordine (il primo è l'artista principale)
+    const seen = new Set(); const uniq = [];
+    for (const n of names) { const k = soft(n); if (n && k && !seen.has(k)) { seen.add(k); uniq.push(n); } }
+    if (uniq.length < 2) continue;
+    const [a, b] = uniq;
+    const key = [soft(a), soft(b)].sort().join('|');
+    if (!pairs.has(key)) pairs.set(key, { a, b, songs: [] });
+    const p = pairs.get(key);
+    const clean = cleanTitle(t.title);
+    if (clean && !p.songs.some(s => normalize(s) === normalize(clean))) p.songs.push(clean);
+  }
+  return [...pairs.values()].filter(p => p.songs.length >= 1);
+}
+
+// amplia l'elenco delle canzoni fatte insieme cercando nei cataloghi dei due artisti
+async function expandPairSongs(pair) {
+  try {
+    const [sa, sb] = await Promise.all([
+      fetchArtistSongs(pair.a).catch(() => []),
+      fetchArtistSongs(pair.b).catch(() => [])
+    ]);
+    // confini di parola: "anna" non deve combaciare dentro "annalisa"
+    const hasName = (text, name) => {
+      const esc = soft(name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp('(^|[^a-z0-9])' + esc + '($|[^a-z0-9])').test(text);
+    };
+    for (const s of [...sa, ...sb]) {
+      const inv = soft((s.rawTitle || s.title) + ' ' + s.artist);
+      if (hasName(inv, pair.a) && hasName(inv, pair.b)) {
+        const c = cleanTitle(s.title);
+        if (c && !pair.songs.some(x => normalize(x) === normalize(c))) pair.songs.push(c);
+      }
+    }
+  } catch {}
+  return pair;
 }
 
 /* ============ Spotify (OAuth PKCE, tutto client-side) ============ */
@@ -468,7 +537,9 @@ function mapSpotifyTrack(t) {
   if (!t || !t.name || !t.artists) return null;
   return {
     title: cleanTitle(t.name),
+    rawTitle: t.name,
     artist: t.artists.map(a => a.name).slice(0, 2).join(', '),
+    artists: t.artists.map(a => a.name),
     primaryArtist: t.artists[0].name,
     art: (t.album && t.album.images && t.album.images[1] && t.album.images[1].url) || '',
     uri: t.uri || null
@@ -655,7 +726,9 @@ const setup = {
   playlistId: null,
   customArtists: [],
   chainArtist: null,
-  chainTimer: 30
+  chainTimer: 30,
+  duelSource: 'genre',     // genre | spotify-top | spotify-playlist
+  genre: 'rap-ita'
 };
 
 function renderPlayers() {
@@ -691,15 +764,19 @@ function addPlayer() {
 
 function refreshSetupVisibility() {
   const isChain = setup.mode === 'chain';
-  $('#opts-guess').classList.toggle('hidden', isChain);
+  const isDuel = setup.mode === 'duel';
+  $('#opts-guess').classList.toggle('hidden', isChain || isDuel);
   $('#opts-points').classList.toggle('hidden', isChain);
   $('#opts-timer').classList.toggle('hidden', isChain);
-  $('#opts-source').classList.toggle('hidden', isChain);
-  $('#opts-audio').classList.toggle('hidden', isChain);
+  $('#opts-source').classList.toggle('hidden', isChain || isDuel);
+  $('#opts-audio').classList.toggle('hidden', isChain || isDuel);
   $('#audio-hint').classList.toggle('hidden', setup.audio !== 'spotify');
   $('#opts-chain').classList.toggle('hidden', !isChain);
-  $('#playlist-picker').classList.toggle('hidden', setup.source !== 'spotify-playlist' || isChain);
-  $('#artists-picker').classList.toggle('hidden', setup.source !== 'artists' || isChain);
+  $('#opts-duel').classList.toggle('hidden', !isDuel);
+  $('#genre-pills').classList.toggle('hidden', setup.duelSource !== 'genre');
+  const wantPlaylist = !isChain && (isDuel ? setup.duelSource === 'spotify-playlist' : setup.source === 'spotify-playlist');
+  $('#playlist-picker').classList.toggle('hidden', !wantPlaylist);
+  $('#artists-picker').classList.toggle('hidden', setup.source !== 'artists' || isChain || isDuel);
 }
 
 function renderChosenArtists() {
@@ -815,7 +892,12 @@ function makeGame() {
     // catena
     chainSongs: [],
     chainUsed: [],
-    failedLookups: 0
+    failedLookups: 0,
+    // duello feat
+    duelPairs: [],
+    duelIndex: -1,
+    duelBooker: -1,
+    duelRound: 0
   };
 }
 
@@ -825,6 +907,11 @@ async function startGame() {
   if (setup.players.length < 1) { toast('Aggiungi almeno un giocatore!'); return; }
   if (setup.mode === 'chain' && setup.players.length < 2) { toast('La catena richiede almeno 2 giocatori!'); return; }
   if (setup.mode === 'chain' && !setup.chainArtist) { toast('Scegli l\'artista della sfida!'); return; }
+  if (setup.mode === 'duel') {
+    if (setup.players.length < 2) { toast('Il Duello Feat richiede almeno 2 giocatori!'); return; }
+    if (setup.duelSource !== 'genre' && !spotifyConnected()) { toast('Prima collega Spotify 💚 (o scegli un genere)'); return; }
+    if (setup.duelSource === 'spotify-playlist' && !setup.playlistId) { toast('Scegli una playlist!'); return; }
+  }
   if (setup.source === 'spotify-top' && setup.mode !== 'chain' && !spotifyConnected()) { toast('Prima collega Spotify 💚'); return; }
   if (setup.source === 'spotify-playlist' && setup.mode !== 'chain' && !setup.playlistId) { toast('Scegli una playlist!'); return; }
   if (setup.source === 'artists' && setup.mode !== 'chain' && !setup.customArtists.length) { toast('Aggiungi almeno un artista!'); return; }
@@ -847,6 +934,40 @@ async function startGame() {
       if (songs.length < 10) { toast('Trovate troppo poche canzoni per questo artista, provane un altro'); throw new Error('few'); }
       game.chainSongs = songs;
       startChain();
+    } else if (game.mode === 'duel') {
+      let tracks = [];
+      if (setup.duelSource === 'spotify-top') tracks = await loadSpotifyTastePool();
+      else if (setup.duelSource === 'spotify-playlist') tracks = await loadSpotifyPlaylistTracks(setup.playlistId);
+      else {
+        // genere: pesca dai cataloghi di ~9 artisti del genere (in parallelo, con cache)
+        const artists = shuffle(GENRES[setup.genre].artists).slice(0, 9);
+        const all = await Promise.all(artists.map(a => fetchArtistSongs(a).catch(() => [])));
+        tracks = all.flat();
+      }
+      // meglio coppie tra artisti riconoscibili: entrambi noti > uno noto > il resto
+      const known = new Set();
+      if (setup.duelSource === 'genre') {
+        GENRES[setup.genre].artists.forEach(a => known.add(soft(a)));
+      } else {
+        const counts = {};
+        for (const t of tracks) {
+          known.add(soft(t.primaryArtist || t.artist));
+          for (const n of (t.artists || [])) counts[soft(n)] = (counts[soft(n)] || 0) + 1;
+        }
+        for (const k in counts) if (counts[k] >= 2) known.add(k);
+      }
+      const all = collabsFromTracks(tracks);
+      const both = all.filter(p => known.has(soft(p.a)) && known.has(soft(p.b)));
+      const one = all.filter(p => !both.includes(p) && (known.has(soft(p.a)) || known.has(soft(p.b))));
+      let pairs = shuffle(both);
+      if (pairs.length < 8) pairs = pairs.concat(shuffle(one));
+      if (pairs.length < 3) {
+        toast('Trovate troppo poche collaborazioni con questa sorgente 😕 prova un genere');
+        throw new Error('few');
+      }
+      game.duelPairs = pairs;
+      duelNextRound();
+      show('screen-duel');
     } else {
       await prepareMusicPool();
       if (game.pool.length < 8 && !game.artistQueue.length) {
@@ -1061,7 +1182,7 @@ function renderWriteAnswer() {
 function startTimer(sec, onEnd) {
   clearTimer();
   game.timerEnd = Date.now() + sec * 1000;
-  const bar = $(game.mode === 'chain' ? '#chain-timerbar' : '#timerbar');
+  const bar = $(game.mode === 'chain' ? '#chain-timerbar' : game.mode === 'duel' ? '#duel-timerbar' : '#timerbar');
   game.timerId = setInterval(() => {
     const left = game.timerEnd - Date.now();
     const frac = Math.max(0, left / (sec * 1000));
@@ -1257,6 +1378,110 @@ function showChainWinner(winner) {
     `Ultimo sopravvissuto · ${n} ${n === 1 ? 'canzone nominata' : 'canzoni nominate'}!`);
 }
 
+/* ============ duello feat ============ */
+
+const playerHue = (i) => (i * 57 + 260) % 360;
+
+function duelPair() { return game.duelPairs[game.duelIndex % game.duelPairs.length]; }
+
+function duelNextRound() {
+  clearTimer();
+  game.duelIndex++;
+  game.duelRound++;
+  game.duelBooker = -1;
+  const pair = duelPair();
+  // in sottofondo arricchisci l'elenco delle canzoni fatte insieme (serve alla verifica)
+  pair.expanding = expandPairSongs(pair);
+
+  $('#duel-round').textContent = `Round ${game.duelRound} · obiettivo ${game.target}`;
+  $('#duel-artist-a').textContent = pair.a;
+  $('#duel-artist-b').textContent = pair.b;
+  $('#duel-timerbar').style.width = '100%';
+  $('#duel-timerbar').classList.remove('danger');
+  $('#duel-answer').classList.add('hidden');
+  $('#duel-result').classList.add('hidden');
+  $('#btn-duel-skip').classList.remove('hidden');
+  $('#duel-hint').textContent = 'Conosci una canzone fatta insieme da questi due? Prenotati! ⚡️';
+
+  const box = $('#duel-buzzers');
+  box.innerHTML = game.players.map((p, i) => `
+    <button class="buzzer-btn" data-buzz="${i}" style="--hue:${playerHue(i)}">
+      <span class="bz-emoji">${p.emoji}</span>
+      <span class="bz-name">${escapeHtml(p.name)}</span>
+      <span class="bz-score">${p.score} pt</span>
+    </button>`).join('');
+  box.classList.remove('hidden');
+  box.querySelectorAll('[data-buzz]').forEach(b => b.onclick = () => duelBuzz(+b.dataset.buzz));
+}
+
+function duelBuzz(i) {
+  if (game.duelBooker >= 0) return;
+  game.duelBooker = i;
+  game.turn = i; // per la classifica / activePlayer
+  const p = game.players[i];
+  sfx('tick'); vibrate([60, 40, 60]);
+  $('#duel-buzzers').classList.add('hidden');
+  $('#btn-duel-skip').classList.add('hidden');
+  $('#duel-hint').textContent = 'Scrivi il titolo di una canzone che hanno fatto insieme!';
+  $('#duel-booker-emoji').textContent = p.emoji;
+  $('#duel-booker-name').textContent = p.name;
+  const answer = $('#duel-answer');
+  answer.classList.remove('hidden');
+  const input = $('#duel-input');
+  input.value = '';
+  setTimeout(() => input.focus(), 120);
+  startTimer(game.timerSec, () => duelResolve(false, '⏰ Tempo scaduto!'));
+}
+
+async function duelSubmit() {
+  if (game.duelBooker < 0) return;
+  const guess = $('#duel-input').value.trim();
+  if (!guess) return;
+  clearTimer();
+  const pair = duelPair();
+  try { await pair.expanding; } catch {}
+  const hit = pair.songs.find(s => isMatch(guess, s));
+  duelResolve(!!hit, hit ? `✅ "${hit}" — esiste davvero!` : '❌ Non risulta tra le loro collaborazioni…');
+}
+
+function duelResolve(ok, message) {
+  if (game.duelBooker < 0) return;
+  const p = game.players[game.duelBooker];
+  const pair = duelPair();
+  if (ok) {
+    p.score += 200;
+    sfx('correct'); vibrate([50, 40, 90]);
+  } else {
+    p.score = Math.max(0, p.score - 100);
+    sfx('wrong'); vibrate(200);
+  }
+  clearTimer();
+  game.duelBooker = -1;
+  $('#duel-answer').classList.add('hidden');
+  const fb = $('#duel-feedback');
+  fb.className = 'chain-feedback ' + (ok ? 'ok' : 'ko');
+  fb.innerHTML = `${escapeHtml(message)}<br>${escapeHtml(p.emoji + ' ' + p.name)}: <b>${ok ? '+200' : '−100'} pt</b>` +
+    (!ok && pair.songs[0] ? `<br><span class="muted">Per esempio: «${escapeHtml(pair.songs[0])}»</span>` : '');
+  $('#duel-result').classList.remove('hidden');
+
+  // vittoria immediata al raggiungimento dell'obiettivo
+  if (ok && p.score >= game.target) {
+    setTimeout(() => showWinner([...game.players].sort((a, b) => b.score - a.score)), 1400);
+  }
+}
+
+function duelSkip() {
+  const pair = duelPair();
+  const fb = $('#duel-feedback');
+  fb.className = 'chain-feedback';
+  fb.innerHTML = pair.songs[0]
+    ? `🤷 Nessuno si è prenotato!<br><span class="muted">Una era: «${escapeHtml(pair.songs[0])}»</span>`
+    : '🤷 Nessuno si è prenotato!';
+  $('#duel-buzzers').classList.add('hidden');
+  $('#btn-duel-skip').classList.add('hidden');
+  $('#duel-result').classList.remove('hidden');
+}
+
 /* ============ vittoria ============ */
 
 function showWinner(sorted, subtitle) {
@@ -1287,6 +1512,13 @@ function rematch() {
     game.turn = -1;
     chainNextTurn();
     show('screen-chain');
+  } else if (game.mode === 'duel') {
+    game.players.forEach(p => { p.score = 0; p.streak = 0; });
+    game.duelPairs = shuffle(game.duelPairs);
+    game.duelIndex = -1;
+    game.duelRound = 0;
+    duelNextRound();
+    show('screen-duel');
   } else {
     game.players.forEach(p => { p.score = 0; p.streak = 0; });
     game.turn = -1;
@@ -1488,6 +1720,19 @@ function bindEvents() {
     $$('#chain-timer-pills .pill').forEach(x => x.classList.toggle('selected', x === p));
   });
 
+  $('#duel-source-cards').addEventListener('click', e => {
+    const card = e.target.closest('.source-card'); if (!card) return;
+    setup.duelSource = card.dataset.dsource;
+    $$('#duel-source-cards .source-card').forEach(c => c.classList.toggle('selected', c === card));
+    refreshSetupVisibility();
+    if (setup.duelSource === 'spotify-playlist') showPlaylistPicker();
+  });
+  $('#genre-pills').addEventListener('click', e => {
+    const p = e.target.closest('.pill'); if (!p) return;
+    setup.genre = p.dataset.genre;
+    $$('#genre-pills .pill').forEach(x => x.classList.toggle('selected', x === p));
+  });
+
   $('#btn-add-artist').onclick = addCustomArtist;
   $('#artist-search-input').addEventListener('keydown', e => { if (e.key === 'Enter') addCustomArtist(); });
   $('#btn-chain-search').onclick = searchChainArtist;
@@ -1507,15 +1752,22 @@ function bindEvents() {
   $('#chain-input').addEventListener('keydown', e => { if (e.key === 'Enter') chainSubmit(); });
   $('#btn-chain-giveup').onclick = () => chainEliminate('🏳️ Si arrende!');
 
+  // duello feat
+  $('#btn-duel-submit').onclick = duelSubmit;
+  $('#duel-input').addEventListener('keydown', e => { if (e.key === 'Enter') duelSubmit(); });
+  $('#btn-duel-giveup').onclick = () => duelResolve(false, '🏳️ Si arrende!');
+  $('#btn-duel-next').onclick = duelNextRound;
+  $('#btn-duel-skip').onclick = duelSkip;
+
   // vittoria
   $('#btn-rematch').onclick = rematch;
   $('#btn-new-game').onclick = () => { stopConfetti(); renderPlayers(); refreshSetupVisibility(); show('screen-setup'); };
   $('#btn-go-home').onclick = () => { stopConfetti(); quitGame(); };
 
   // quit + classifiche
-  ['#btn-quit-1', '#btn-quit-2', '#btn-quit-3'].forEach(id => $(id).onclick = () => openModal('#modal-quit'));
+  ['#btn-quit-1', '#btn-quit-2', '#btn-quit-3', '#btn-quit-4'].forEach(id => $(id).onclick = () => openModal('#modal-quit'));
   $('#btn-quit-confirm').onclick = quitGame;
-  ['#btn-scores-1', '#btn-scores-2'].forEach(id => $(id).onclick = showScores);
+  ['#btn-scores-1', '#btn-scores-2', '#btn-scores-3'].forEach(id => $(id).onclick = showScores);
 
   // modali
   $$('[data-close-modal]').forEach(b => b.onclick = closeModals);

@@ -34,7 +34,7 @@
       </button>
       <button class="btn btn-glass" id="btn-howto">❓ Come si gioca</button>
     </div>
-    <p class="footer-note" id="version-note">v1.4 · funziona offline dopo la prima apertura</p>
+    <p class="footer-note" id="version-note">v1.5 · funziona offline dopo la prima apertura</p>
   </section>
 
   <!-- ============ SETUP ============ -->
@@ -70,6 +70,11 @@
           <span class="mode-emoji">🔗</span>
           <span class="mode-name">Catena d'artista</span>
           <span class="mode-desc">A turno nomina canzoni di un artista: chi si blocca è fuori!</span>
+        </button>
+        <button class="mode-card" data-mode="duel">
+          <span class="mode-emoji">🤝</span>
+          <span class="mode-name">Duello Feat</span>
+          <span class="mode-desc">Due artisti che hanno collaborato: prenotati col buzzer e nomina il brano!</span>
         </button>
       </div>
 
@@ -133,9 +138,6 @@
             <span class="mode-desc">Scegliete voi gli artisti del quiz</span>
           </button>
         </div>
-        <div id="playlist-picker" class="hidden">
-          <div id="playlist-list" class="playlist-list"><p class="muted">Caricamento playlist…</p></div>
-        </div>
         <div id="artists-picker" class="hidden">
           <div class="add-player-row">
             <input type="text" id="artist-search-input" placeholder="Cerca artista… (es. Måneskin)" autocomplete="off" enterkeyhint="search">
@@ -143,6 +145,37 @@
           </div>
           <div id="chosen-artists" class="chips-row"></div>
         </div>
+      </div>
+
+      <!-- sorgente per duello feat -->
+      <div id="opts-duel" class="opt-group hidden">
+        <h3 class="setup-label">🤝 Dove cerchiamo le collaborazioni?</h3>
+        <div class="source-cards" id="duel-source-cards">
+          <button class="source-card selected" data-dsource="genre">
+            <span class="mode-emoji">🎼</span><span class="mode-name">Un genere</span>
+            <span class="mode-desc">Scegliete voi il genere musicale</span>
+          </button>
+          <button class="source-card" data-dsource="spotify-top">
+            <span class="mode-emoji">💚</span><span class="mode-name">I miei gusti Spotify</span>
+            <span class="mode-desc">Collaborazioni tra i brani che ascolti</span>
+          </button>
+          <button class="source-card" data-dsource="spotify-playlist">
+            <span class="mode-emoji">📻</span><span class="mode-name">Una mia playlist</span>
+            <span class="mode-desc">Collaborazioni pescate dalla playlist</span>
+          </button>
+        </div>
+        <div class="pill-row" id="genre-pills" style="margin-top:10px">
+          <button class="pill selected" data-genre="rap-ita">🇮🇹 Rap/Trap</button>
+          <button class="pill" data-genre="pop-ita">🇮🇹 Pop</button>
+          <button class="pill" data-genre="pop-int">🌍 Pop int.</button>
+          <button class="pill" data-genre="hiphop">🇺🇸 Hip-Hop</button>
+          <button class="pill" data-genre="latin">🌴 Latin</button>
+          <button class="pill" data-genre="dance">🎛 Dance</button>
+        </div>
+      </div>
+
+      <div id="playlist-picker" class="hidden">
+        <div id="playlist-list" class="playlist-list"><p class="muted">Caricamento playlist…</p></div>
       </div>
 
       <!-- artista per catena -->
@@ -255,6 +288,44 @@
     </div>
   </section>
 
+  <!-- ============ DUELLO FEAT ============ -->
+  <section class="screen" id="screen-duel">
+    <header class="topbar">
+      <button class="btn-icon" id="btn-quit-4">✕</button>
+      <h2 id="duel-round">Round 1</h2>
+      <button class="btn-icon" id="btn-scores-3">🏆</button>
+    </header>
+
+    <div class="timerbar-wrap"><div class="timerbar" id="duel-timerbar"></div></div>
+
+    <div class="game-content">
+      <div class="duel-pair">
+        <div class="duel-artist" id="duel-artist-a"></div>
+        <div class="duel-x">×</div>
+        <div class="duel-artist" id="duel-artist-b"></div>
+      </div>
+      <p class="chain-hint" id="duel-hint">Conosci una canzone fatta insieme da questi due? Prenotati! ⚡️</p>
+
+      <div id="duel-buzzers" class="duel-buzzers"></div>
+
+      <div id="duel-answer" class="answers-write hidden">
+        <div class="chain-turn"><span class="chain-turn-avatar" id="duel-booker-emoji"></span><span>Tocca a <b id="duel-booker-name"></b>!</span></div>
+        <input type="text" id="duel-input" placeholder="Titolo della canzone insieme…" autocomplete="off" autocorrect="off" autocapitalize="off" enterkeyhint="send">
+        <div class="write-btns">
+          <button class="btn btn-glass" id="btn-duel-giveup">Mi arrendo 🏳️</button>
+          <button class="btn btn-primary" id="btn-duel-submit">Conferma ✓</button>
+        </div>
+      </div>
+
+      <div id="duel-result" class="duel-result hidden">
+        <p class="chain-feedback" id="duel-feedback"></p>
+        <button class="btn btn-primary btn-big" id="btn-duel-next">Avanti →</button>
+      </div>
+
+      <button class="btn btn-glass" id="btn-duel-skip" style="margin-top:auto">Nessuno lo sa 🤷</button>
+    </div>
+  </section>
+
   <!-- ============ VINCITORE ============ -->
   <section class="screen" id="screen-winner">
     <canvas id="confetti-canvas"></canvas>
@@ -290,6 +361,7 @@
       <p><b>🔠 Quiz 4 opzioni</b> — A turno parte una canzone: hai pochi secondi per scegliere la risposta giusta tra 4. Più sei veloce, più punti fai! Vince chi arriva per primo ai punti stabiliti.</p>
       <p><b>⌨️ Scrivila!</b> — Come il quiz, ma la risposta la scrivi tu. Non serve essere perfetti: maiuscole, accenti e piccoli errori di battitura sono perdonati. 😉 Nella variante "uno dei due", il titolo vale 150 punti e l'artista 100: rischiare paga!</p>
       <p><b>🔗 Catena d'artista</b> — Scegliete un artista. A turno ognuno nomina una sua canzone (vera e non già detta!). Chi si blocca o sbaglia allo scadere del tempo è eliminato. Vince l'ultimo che resta.</p>
+      <p><b>🤝 Duello Feat</b> — L'app propone due artisti che hanno collaborato. Il primo che tocca il proprio buzzer si prenota e deve scrivere il titolo di una canzone fatta insieme: +200 punti se è giusta, −100 se sbaglia o scade il tempo. Prenotarsi è un rischio!</p>
       <p><b>💚 Spotify</b> — Collega il tuo account per quiz basati sui tuoi brani più ascoltati, i preferiti o le tue playlist. La musica viene riprodotta con estratti gratuiti di 30 secondi: non serve Spotify Premium!</p>
       <p><b>🔥 Bonus serie</b> — Indovina più volte di fila per punti extra!</p>
     </div>

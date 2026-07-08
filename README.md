@@ -7,6 +7,7 @@ Party game musicale da giocare con gli amici, tutti sullo stesso telefono. **100
 - **🔠 Quiz 4 opzioni** — parte una canzone, scegli la risposta giusta tra 4 prima che scada il tempo. Più sei veloce più punti fai. Vince chi arriva per primo al punteggio scelto.
 - **⌨️ Scrivila!** — come il quiz ma la risposta la scrivi tu (titolo, artista o entrambi). Maiuscole, accenti e piccoli errori di battitura vengono perdonati.
 - **🔗 Catena d'artista** — scegliete un artista: a turno ognuno nomina una sua canzone vera e non già detta. Chi si blocca è eliminato, vince l'ultimo che resta.
+- **🤝 Duello Feat** — l'app propone due artisti che hanno collaborato (dai tuoi gusti Spotify, da una playlist o da un genere a scelta). Lo schermo si divide in buzzer, uno per giocatore: il primo che si prenota deve nominare una canzone fatta insieme. +200 se giusta, −100 se sbagliata!
 
 Sorgenti musicali per i quiz: **i tuoi gusti Spotify** (top brani + preferiti), **una tua playlist**, **artisti a scelta** o un **mix di hit famose**. L'audio usa gli estratti gratuiti di 30 secondi di iTunes/Deezer.
 
