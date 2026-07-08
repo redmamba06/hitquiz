@@ -34,7 +34,7 @@
       </button>
       <button class="btn btn-glass" id="btn-howto">❓ Come si gioca</button>
     </div>
-    <p class="footer-note" id="version-note">v1.7 · funziona offline dopo la prima apertura</p>
+    <p class="footer-note" id="version-note">v1.8 · funziona offline dopo la prima apertura</p>
   </section>
 
   <!-- ============ SETUP ============ -->
@@ -142,6 +142,10 @@
             <span class="mode-emoji">📻</span><span class="mode-name">Una mia playlist</span>
             <span class="mode-desc">Scegli una playlist dal tuo Spotify</span>
           </button>
+          <button class="source-card" data-source="genre">
+            <span class="mode-emoji">🎼</span><span class="mode-name">Un genere</span>
+            <span class="mode-desc">Scegliete voi il genere musicale</span>
+          </button>
           <button class="source-card" data-source="artists">
             <span class="mode-emoji">🎤</span><span class="mode-name">Artisti a scelta</span>
             <span class="mode-desc">Scegliete voi gli artisti del quiz</span>
@@ -173,6 +177,9 @@
             <span class="mode-desc">Collaborazioni pescate dalla playlist</span>
           </button>
         </div>
+      </div>
+
+      <div id="genre-picker" class="hidden">
         <div class="pill-row" id="genre-pills" style="margin-top:10px">
           <button class="pill selected" data-genre="rap-ita">🇮🇹 Rap/Trap</button>
           <button class="pill" data-genre="pop-ita">🇮🇹 Pop</button>

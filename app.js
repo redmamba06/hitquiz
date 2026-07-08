@@ -818,7 +818,8 @@ function refreshSetupVisibility() {
   $('#audio-hint').classList.toggle('hidden', setup.audio !== 'spotify');
   $('#opts-chain').classList.toggle('hidden', !isChain);
   $('#opts-duel').classList.toggle('hidden', !isDuel);
-  $('#genre-pills').classList.toggle('hidden', setup.duelSource !== 'genre');
+  const wantGenre = !isChain && (isDuel ? setup.duelSource === 'genre' : setup.source === 'genre');
+  $('#genre-picker').classList.toggle('hidden', !wantGenre);
   const wantPlaylist = !isChain && (isDuel ? setup.duelSource === 'spotify-playlist' : setup.source === 'spotify-playlist');
   $('#playlist-picker').classList.toggle('hidden', !wantPlaylist);
   $('#artists-picker').classList.toggle('hidden', setup.source !== 'artists' || isChain || isDuel);
@@ -1042,7 +1043,9 @@ async function prepareMusicPool() {
     game.pool = shuffle(await loadSpotifyPlaylistTracks(setup.playlistId));
     game.queue = [...game.pool];
   } else {
-    const artists = setup.source === 'artists' ? setup.customArtists : FAMOUS_ARTISTS;
+    const artists = setup.source === 'artists' ? setup.customArtists
+      : setup.source === 'genre' ? GENRES[setup.genre].artists
+      : FAMOUS_ARTISTS;
     game.artistQueue = shuffle(artists);
     await refillFromArtists(2); // precarica 2 artisti
   }
@@ -1908,7 +1911,7 @@ function bindEvents() {
   $('#source-cards').addEventListener('click', e => {
     const card = e.target.closest('.source-card'); if (!card) return;
     setup.source = card.dataset.source;
-    $$('.source-card').forEach(c => c.classList.toggle('selected', c === card));
+    $$('#source-cards .source-card').forEach(c => c.classList.toggle('selected', c === card));
     refreshSetupVisibility();
     if (setup.source === 'spotify-playlist') showPlaylistPicker();
     if (setup.source === 'artists') renderChosenArtists();
