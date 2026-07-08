@@ -146,6 +146,43 @@ function stopMusic() {
   if (setup.audio === 'spotify' && game && game.usedSpotifyAudio) spotifyPause();
 }
 
+// avvia l'anteprima e conferma che stia suonando davvero (gli URL possono essere morti)
+function tryPlayPreview(url, ms = 6000) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (ok) => { if (done) return; done = true; cleanup(); resolve(ok); };
+    const onPlaying = () => finish(true);
+    const onError = () => finish(false);
+    const timer = setTimeout(() => finish(!player.paused && player.currentTime > 0), ms);
+    function cleanup() {
+      clearTimeout(timer);
+      player.removeEventListener('playing', onPlaying);
+      player.removeEventListener('error', onError);
+    }
+    player.addEventListener('playing', onPlaying);
+    player.addEventListener('error', onError);
+    player.src = url;
+    player.currentTime = 0;
+    player.volume = 1;
+    player.play().catch(() => finish(false));
+  });
+}
+
+// riproduce il brano; se il link è scaduto lo ri-risolve una volta da zero
+async function playTrackAudio(track) {
+  if (!track.preview) return false;
+  let ok = await tryPlayPreview(track.preview);
+  if (!ok) {
+    const key = normalize(track.artist) + '|' + normalize(track.title);
+    delete previewCache[key];
+    savePreviewCache();
+    track.preview = null;
+    const again = await resolvePreview(track);
+    if (again && track.preview) ok = await tryPlayPreview(track.preview);
+  }
+  return ok;
+}
+
 /* ============ JSONP + API musica (iTunes primario, Deezer fallback) ============ */
 
 function jsonp(url, timeoutMs = 8000) {
@@ -244,13 +281,18 @@ function savePreviewCache() {
   store.set('gs_preview_cache', previewCache);
 }
 
+// gli URL delle anteprime (soprattutto Deezer) scadono: la cache vale mezza giornata
+const PREVIEW_TTL = 12 * 60 * 60 * 1000;
+
 // trova l'estratto 30s per un brano {title, artist}
 async function resolvePreview(item) {
   if (item.preview) return item;
   const key = normalize(item.artist) + '|' + normalize(item.title);
   const cached = previewCache[key];
-  if (cached === 'x') return null;
-  if (cached) { item.preview = cached.p; item.art = item.art || cached.a; return item; }
+  const fresh = cached && typeof cached === 'object' && cached.ts && (Date.now() - cached.ts < PREVIEW_TTL);
+  if (fresh && cached.x) return null;
+  if (fresh && cached.p) { item.preview = cached.p; item.art = item.art || cached.a; return item; }
+  // (voci vecchie o senza data vengono ignorate e ri-risolte)
 
   const score = (r) => {
     let s = 0;
@@ -270,7 +312,7 @@ async function resolvePreview(item) {
     if (best && score(best) >= 4) {
       item.preview = best.previewUrl;
       item.art = item.art || (best.artworkUrl100 || '').replace('100x100', '300x300');
-      previewCache[key] = { p: item.preview, a: item.art }; savePreviewCache();
+      previewCache[key] = { p: item.preview, a: item.art, ts: Date.now() }; savePreviewCache();
       return item;
     }
   } catch {}
@@ -283,12 +325,12 @@ async function resolvePreview(item) {
     if (best && score(best) >= 4) {
       item.preview = best.preview;
       item.art = item.art || (best.album && best.album.cover_medium) || '';
-      previewCache[key] = { p: item.preview, a: item.art }; savePreviewCache();
+      previewCache[key] = { p: item.preview, a: item.art, ts: Date.now() }; savePreviewCache();
       return item;
     }
   } catch {}
 
-  previewCache[key] = 'x'; savePreviewCache();
+  previewCache[key] = { x: 1, ts: Date.now() }; savePreviewCache();
   return null;
 }
 
@@ -1132,10 +1174,21 @@ async function beginTurn() {
     }
     game.usedSpotifyAudio = true;
   } else {
-    player.src = track.preview;
-    player.currentTime = 0;
-    player.volume = 1;
-    try { await player.play(); } catch {}
+    const okAudio = await playTrackAudio(track);
+    if (!okAudio) {
+      // canzone che non suona: passane un'altra da solo (max 3 tentativi)
+      game.playRetries = (game.playRetries || 0) + 1;
+      if (game.playRetries <= 3) {
+        toast('🙉 Questa canzone non si carica: ne pesco un\'altra…');
+        beginTurn();
+      } else {
+        game.playRetries = 0;
+        toast('Problemi con l\'audio: controlla la connessione 😕');
+        show('screen-pass');
+      }
+      return;
+    }
+    game.playRetries = 0;
   }
   $('#vinyl').classList.add('spinning');
   $('#equalizer').classList.remove('paused');
@@ -1247,10 +1300,21 @@ async function buzzStartRound() {
     }
     game.usedSpotifyAudio = true;
   } else {
-    player.src = track.preview;
-    player.currentTime = 0;
-    player.volume = 1;
-    try { await player.play(); } catch {}
+    const okAudio = await playTrackAudio(track);
+    if (!okAudio) {
+      game.playRetries = (game.playRetries || 0) + 1;
+      if (game.playRetries <= 3) {
+        toast('🙉 Questa canzone non si carica: ne pesco un\'altra…');
+        buzzStartRound();
+      } else {
+        game.playRetries = 0;
+        toast('Problemi con l\'audio: controlla la connessione 😕');
+        $('#btn-buzz-start').classList.remove('hidden');
+        $('#loading-track').classList.add('hidden');
+      }
+      return;
+    }
+    game.playRetries = 0;
   }
   $('#vinyl').classList.add('spinning');
   $('#equalizer').classList.remove('paused');
@@ -1970,6 +2034,6 @@ init();
 // hook di debug (usato solo in sviluppo)
 window.__hq = {
   get game() { return game; }, get setup() { return setup; },
-  isMatch, normalize,
+  isMatch, normalize, tryPlayPreview, playTrackAudio,
   forceItunesDown() { itunesFails = 99; }
 };
