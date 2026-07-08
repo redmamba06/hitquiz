@@ -19,7 +19,11 @@ const online = {
 const PLAYER_STALE_MS = 20000;
 
 function onlineLink(code) {
-  return location.origin + location.pathname + '?room=' + code;
+  let u = location.origin + location.pathname + '?room=' + code;
+  // il link porta con sé l'URL del database: chi lo riceve non deve configurare nulla
+  const db = Net.firebaseUrl();
+  if (db) u += '&db=' + encodeURIComponent(db.replace(/^https?:\/\//, ''));
+  return u;
 }
 
 /* ---------- configurazione Firebase (una tantum) ---------- */
@@ -262,9 +266,16 @@ function bindOnlineEvents() {
 
 // se si apre un link con ?room=CODE, entra nel flusso di ingresso
 function handleRoomLink() {
-  const code = new URLSearchParams(location.search).get('room');
+  const params = new URLSearchParams(location.search);
+  const code = params.get('room');
   if (!code) return false;
   Net.restore();
+  // configurazione automatica dal link: l'amico non deve incollare nessun URL
+  const db = params.get('db');
+  if (db) {
+    const url = /^https?:\/\//.test(db) ? db : 'https://' + db;
+    Net.configureFirebase(url);
+  }
   const name = localStorage.getItem('gs_my_name');
   if (name && Net.configured()) joinRoom(code);
   else showJoinNamePrompt(code);
