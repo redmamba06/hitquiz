@@ -155,18 +155,75 @@ function jsonp(url, timeoutMs = 8000) {
 const ITUNES = 'https://itunes.apple.com/search';
 
 // iTunes supporta CORS: fetch diretta come via principale (i content blocker
-// mobili spesso bloccano gli script di terze parti ma non le fetch), JSONP di riserva
+// mobili spesso bloccano gli script di terze parti ma non le fetch), JSONP di riserva.
+// Su alcuni dispositivi iTunes è irraggiungibile del tutto: dopo 2 fallimenti
+// completi smettiamo di provarci per non sprecare 20s a chiamata.
+let itunesFails = 0;
 async function itunesGet(url, timeoutMs = 10000) {
+  if (itunesFails >= 2) throw new Error('itunes-non-raggiungibile');
   try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), timeoutMs);
     const res = await fetch(url, { signal: ctrl.signal });
     clearTimeout(t);
     if (!res.ok) throw new Error('http ' + res.status);
-    return await res.json();
+    const d = await res.json();
+    itunesFails = 0;
+    return d;
   } catch {
-    return jsonp(url, timeoutMs);
+    try {
+      const d = await jsonp(url, timeoutMs);
+      itunesFails = 0;
+      return d;
+    } catch (e) {
+      itunesFails++;
+      throw e;
+    }
   }
+}
+
+/* ---- Deezer: fonte principale alternativa (JSONP, funziona ovunque) ---- */
+
+async function deezerArtistSongs(artistName) {
+  const ta = normalize(artistName);
+  const out = []; const seen = new Set();
+  const collect = (arr) => {
+    for (const t of (arr || [])) {
+      if (!t.title || !t.artist) continue;
+      const an = normalize(t.artist.name || '');
+      if (an !== ta && !an.includes(ta) && !ta.includes(an)) continue;
+      const k = normalize(cleanTitle(t.title));
+      if (!k || seen.has(k)) continue;
+      seen.add(k);
+      out.push({
+        title: cleanTitle(t.title),
+        artist: t.artist.name,
+        primaryArtist: t.artist.name,
+        preview: t.preview || null,
+        art: (t.album && t.album.cover_medium) || ''
+      });
+    }
+  };
+  // 1) classifica dei brani dell'artista (i più famosi, con anteprime)
+  try {
+    const d = await jsonp(`https://api.deezer.com/search/artist?q=${encodeURIComponent(artistName)}&limit=3&output=jsonp`);
+    const best = (d.data || []).find(a => { const n = normalize(a.name); return n === ta || n.includes(ta) || ta.includes(n); });
+    if (best) {
+      const top = await jsonp(`https://api.deezer.com/artist/${best.id}/top?limit=100&output=jsonp`);
+      collect(top.data);
+    }
+  } catch {}
+  // 2) catalogo più ampio (utile per la catena)
+  try {
+    const d = await jsonp(`https://api.deezer.com/search?q=${encodeURIComponent(`artist:"${artistName}"`)}&limit=100&output=jsonp`);
+    collect(d.data);
+  } catch {}
+  return out;
+}
+
+async function deezerSearchArtists(term) {
+  const d = await jsonp(`https://api.deezer.com/search/artist?q=${encodeURIComponent(term)}&limit=5&output=jsonp`);
+  return (d.data || []).map(a => ({ name: a.name, genre: '' }));
 }
 
 // cache lookup anteprime in localStorage (persistente fra partite)
@@ -234,9 +291,13 @@ async function fetchArtistSongs(artistName) {
   try {
     songs = await fetchArtistSongsItunes(artistName);
   } catch {}
-  // fallback via Spotify quando iTunes non risponde o trova poco
+  // fallback Deezer quando iTunes non risponde o trova poco
+  if (songs.length < 5) {
+    try { const d = await deezerArtistSongs(artistName); if (d.length > songs.length) songs = d; } catch {}
+  }
+  // ultima spiaggia: ricerca Spotify (max ~50 brani)
   if (songs.length < 5 && spotifyConnected()) {
-    try { songs = await spotifyArtistSongs(artistName); } catch {}
+    try { const s = await spotifyArtistSongs(artistName); if (s.length > songs.length) songs = s; } catch {}
   }
   artistSongsCache[key] = songs;
   return songs;
@@ -281,12 +342,16 @@ async function searchArtists(term) {
       if (arts.length) return arts;
     } catch {}
   }
-  const d = await itunesGet(`${ITUNES}?term=${encodeURIComponent(term)}&media=music&entity=musicArtist&limit=8&country=IT`);
-  const seen = new Set();
-  return (d.results || [])
-    .filter(r => { const k = normalize(r.artistName); if (!k || seen.has(k)) return false; seen.add(k); return true; })
-    .slice(0, 5)
-    .map(r => ({ name: r.artistName, genre: r.primaryGenreName || '' }));
+  try {
+    const d = await itunesGet(`${ITUNES}?term=${encodeURIComponent(term)}&media=music&entity=musicArtist&limit=8&country=IT`);
+    const seen = new Set();
+    const arts = (d.results || [])
+      .filter(r => { const k = normalize(r.artistName); if (!k || seen.has(k)) return false; seen.add(k); return true; })
+      .slice(0, 5)
+      .map(r => ({ name: r.artistName, genre: r.primaryGenreName || '' }));
+    if (arts.length) return arts;
+  } catch {}
+  return deezerSearchArtists(term);
 }
 
 /* ============ Spotify (OAuth PKCE, tutto client-side) ============ */
@@ -1040,9 +1105,9 @@ function answerWrite(skip = false) {
   const guessKind = game.currentGuessKind;
   const track = game.current;
   const val = $('#write-input').value;
-  let ok = false;
+  let ok = false, titleOk = false;
   if (!skip && val.trim()) {
-    const titleOk = isMatch(val, track.title);
+    titleOk = isMatch(val, track.title);
     const artistOk = track.artist.split(',').some(a => isMatch(val, a)) || isMatch(val, track.artist);
     ok = guessKind === 'title' ? titleOk : guessKind === 'artist' ? artistOk : (titleOk || artistOk);
   }
@@ -1058,7 +1123,9 @@ function answerWrite(skip = false) {
   }
   game.answered = true;
   clearTimer();
-  finishTurn(ok, ok ? computePoints(150) : null);
+  // il titolo è più difficile dell'artista: vale di più
+  const base = guessKind === 'artist' ? 100 : guessKind === 'title' ? 150 : (titleOk ? 150 : 100);
+  finishTurn(ok, ok ? computePoints(base) : null);
 }
 
 function onTimeout() {
@@ -1342,11 +1409,15 @@ async function runDiagnostics() {
       const d = await spotifyApi('/search?q=queen&type=artist&limit=1');
       return ((d.artists && d.artists.items) || []).length + ' risultati';
     });
-    await test('Dispositivi Spotify', async () => {
-      const d = await spotifyApi('/me/player/devices');
-      const devs = (d.devices || []).map(x => x.name + (x.is_active ? ' (attivo)' : ''));
-      return devs.length ? devs.join(', ') : 'nessuno — apri l\'app Spotify';
-    });
+    if (!spotifyHasCurrentScopes()) {
+      rows.push('⚠️ Dispositivi Spotify · servono i nuovi permessi: tocca "Aggiorna permessi" qui sopra'); render();
+    } else {
+      await test('Dispositivi Spotify', async () => {
+        const d = await spotifyApi('/me/player/devices');
+        const devs = (d.devices || []).map(x => x.name + (x.is_active ? ' (attivo)' : ''));
+        return devs.length ? devs.join(', ') : 'nessuno — apri l\'app Spotify';
+      });
+    }
   } else {
     rows.push('⚪️ Spotify non collegato'); render();
   }
@@ -1479,4 +1550,8 @@ async function init() {
 init();
 
 // hook di debug (usato solo in sviluppo)
-window.__hq = { get game() { return game; }, get setup() { return setup; }, isMatch, normalize };
+window.__hq = {
+  get game() { return game; }, get setup() { return setup; },
+  isMatch, normalize,
+  forceItunesDown() { itunesFails = 99; }
+};
