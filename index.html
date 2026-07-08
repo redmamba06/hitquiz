@@ -34,7 +34,7 @@
       </button>
       <button class="btn btn-glass" id="btn-howto">❓ Come si gioca</button>
     </div>
-    <p class="footer-note" id="version-note">v1.5 · funziona offline dopo la prima apertura</p>
+    <p class="footer-note" id="version-note">v1.6 · funziona offline dopo la prima apertura</p>
   </section>
 
   <!-- ============ SETUP ============ -->
@@ -79,6 +79,15 @@
       </div>
 
       <!-- opzioni quiz/write -->
+      <div id="opts-style" class="opt-group">
+        <h3 class="setup-label">🎮 Come si risponde?</h3>
+        <div class="pill-row" id="style-pills">
+          <button class="pill selected" data-style="turns">Uno alla volta</button>
+          <button class="pill" data-style="buzz">Prenotazione ⚡️</button>
+        </div>
+        <p class="muted hidden" id="style-hint" style="margin-top:8px">La canzone parte per tutti: il primo che tocca il suo buzzer risponde. Giusto <b>+200</b> (titolo scritto) / sbagliato <b>−100</b>. Vince chi arriva all'obiettivo!</p>
+      </div>
+
       <div id="opts-guess" class="opt-group">
         <h3 class="setup-label">🎯 Cosa bisogna indovinare?</h3>
         <div class="pill-row" id="guess-pills">
@@ -235,6 +244,10 @@
 
       <div id="loading-track" class="loading-track hidden"><div class="spinner"></div><p>Carico la canzone…</p></div>
 
+      <button class="btn btn-primary btn-big hidden pulse" id="btn-buzz-start">▶️ Fai partire la canzone!</button>
+
+      <div id="game-buzzers" class="duel-buzzers compact hidden"></div>
+
       <div id="answers-quiz" class="answers-quiz hidden"></div>
 
       <div id="answers-write" class="answers-write hidden">
@@ -359,6 +372,7 @@
     <h2>❓ Come si gioca</h2>
     <div class="howto-text">
       <p><b>🔠 Quiz 4 opzioni</b> — A turno parte una canzone: hai pochi secondi per scegliere la risposta giusta tra 4. Più sei veloce, più punti fai! Vince chi arriva per primo ai punti stabiliti.</p>
+      <p><b>⚡️ Prenotazione</b> — Nel quiz e in "Scrivila!" puoi scegliere di giocare col buzzer: la canzone parte per tutti e il primo che si prenota risponde. +200 se giusto, −100 se sbagliato: servono orecchie E coraggio!</p>
       <p><b>⌨️ Scrivila!</b> — Come il quiz, ma la risposta la scrivi tu. Non serve essere perfetti: maiuscole, accenti e piccoli errori di battitura sono perdonati. 😉 Nella variante "uno dei due", il titolo vale 150 punti e l'artista 100: rischiare paga!</p>
       <p><b>🔗 Catena d'artista</b> — Scegliete un artista. A turno ognuno nomina una sua canzone (vera e non già detta!). Chi si blocca o sbaglia allo scadere del tempo è eliminato. Vince l'ultimo che resta.</p>
       <p><b>🤝 Duello Feat</b> — L'app propone due artisti che hanno collaborato. Il primo che tocca il proprio buzzer si prenota e deve scrivere il titolo di una canzone fatta insieme: +200 punti se è giusta, −100 se sbaglia o scade il tempo. Prenotarsi è un rischio!</p>

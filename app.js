@@ -717,7 +717,8 @@ function closeModals() { $$('.modal-backdrop').forEach(m => m.classList.add('hid
 
 const setup = {
   players: store.get('gs_players', ['Giocatore 1', 'Giocatore 2']),
-  mode: 'quiz',            // quiz | write | chain
+  mode: 'quiz',            // quiz | write | chain | duel
+  playStyle: store.get('gs_style', 'turns'), // turns (uno alla volta) | buzz (prenotazione)
   guess: 'title',          // title | artist | either
   target: 1000,
   timer: 15,
@@ -765,6 +766,8 @@ function addPlayer() {
 function refreshSetupVisibility() {
   const isChain = setup.mode === 'chain';
   const isDuel = setup.mode === 'duel';
+  $('#opts-style').classList.toggle('hidden', isChain || isDuel);
+  $('#style-hint').classList.toggle('hidden', setup.playStyle !== 'buzz');
   $('#opts-guess').classList.toggle('hidden', isChain || isDuel);
   $('#opts-points').classList.toggle('hidden', isChain);
   $('#opts-timer').classList.toggle('hidden', isChain);
@@ -873,6 +876,8 @@ let game = null;
 function makeGame() {
   return {
     mode: setup.mode,
+    playStyle: setup.playStyle,
+    buzzBooker: -1,
     guess: setup.guess,
     target: setup.target,
     timerSec: setup.mode === 'chain' ? setup.chainTimer : setup.timer,
@@ -907,6 +912,9 @@ async function startGame() {
   if (setup.players.length < 1) { toast('Aggiungi almeno un giocatore!'); return; }
   if (setup.mode === 'chain' && setup.players.length < 2) { toast('La catena richiede almeno 2 giocatori!'); return; }
   if (setup.mode === 'chain' && !setup.chainArtist) { toast('Scegli l\'artista della sfida!'); return; }
+  if ((setup.mode === 'quiz' || setup.mode === 'write') && setup.playStyle === 'buzz' && setup.players.length < 2) {
+    toast('Per giocare a prenotazione servono almeno 2 giocatori!'); return;
+  }
   if (setup.mode === 'duel') {
     if (setup.players.length < 2) { toast('Il Duello Feat richiede almeno 2 giocatori!'); return; }
     if (setup.duelSource !== 'genre' && !spotifyConnected()) { toast('Prima collega Spotify 💚 (o scegli un genere)'); return; }
@@ -974,7 +982,8 @@ async function startGame() {
         toast('Trovati troppo pochi brani con questa sorgente 😕');
         throw new Error('few');
       }
-      nextTurn();
+      if (game.playStyle === 'buzz') { game.round = 0; buzzNextRound(); }
+      else nextTurn();
     }
   } catch (e) {
     if (e.message !== 'few') toast('Errore nel preparare la partita, riprova');
@@ -1079,7 +1088,10 @@ async function beginTurn() {
   $('#game-player-emoji').textContent = p.emoji;
   $('#game-player-name').textContent = p.name;
   $('#answers-quiz').classList.add('hidden');
+  $('#answers-quiz').classList.remove('locked');
   $('#answers-write').classList.add('hidden');
+  $('#game-buzzers').classList.add('hidden');
+  $('#btn-buzz-start').classList.add('hidden');
   $('#loading-track').classList.remove('hidden');
   $('#vinyl').classList.remove('spinning');
   $('#equalizer').classList.add('paused');
@@ -1177,6 +1189,132 @@ function renderWriteAnswer() {
   setTimeout(() => input.focus(), 150);
 }
 
+/* ---- partite a prenotazione (quiz/scrittura col buzzer) ---- */
+
+function buzzNextRound() {
+  stopMusic();
+  clearTimer();
+  $('#result-overlay').classList.add('hidden');
+  game.round++;
+  game.buzzBooker = -1;
+  game.answered = false;
+  show('screen-game');
+  $('#game-player-emoji').textContent = '⚡️';
+  $('#game-player-name').textContent = `Round ${game.round} · obiettivo ${game.target}`;
+  $('#answers-quiz').classList.add('hidden');
+  $('#answers-write').classList.add('hidden');
+  $('#game-buzzers').classList.add('hidden');
+  $('#loading-track').classList.add('hidden');
+  $('#btn-buzz-start').classList.remove('hidden');
+  $('#vinyl').classList.remove('spinning');
+  $('#equalizer').classList.add('paused');
+  $('#timerbar').style.width = '100%';
+  $('#timerbar').classList.remove('danger');
+  $('#game-question').textContent = 'Tutti pronti col dito sul buzzer? 👇';
+}
+
+async function buzzStartRound() {
+  $('#btn-buzz-start').classList.add('hidden');
+  $('#loading-track').classList.remove('hidden');
+
+  const track = await pullNextTrack();
+  if (!track) {
+    toast('Non riesco a trovare altre canzoni 😕 — controlla la connessione');
+    show('screen-setup');
+    return;
+  }
+  game.current = track;
+  $('#loading-track').classList.add('hidden');
+
+  let guessKind = game.guess;
+  if (guessKind === 'either' && game.mode === 'quiz') guessKind = Math.random() < .5 ? 'title' : 'artist';
+  game.currentGuessKind = guessKind;
+  $('#game-question').textContent =
+    (game.mode === 'write'
+      ? (guessKind === 'title' ? 'Sai il TITOLO?' : guessKind === 'artist' ? 'Sai l\'ARTISTA?' : 'Sai TITOLO o ARTISTA?')
+      : (guessKind === 'artist' ? 'Chi la canta?' : 'Che canzone è?')) + ' Prenotati! ⚡️';
+
+  if (setup.audio === 'spotify') {
+    const res = await spotifyPlay(track.uri);
+    if (res !== true) {
+      toast(res === 'premium'
+        ? 'Questo account non è Premium: usa le anteprime 30s 🎧'
+        : 'Nessun dispositivo Spotify attivo: apri l\'app Spotify, avvia un brano qualsiasi e riprova', 5000);
+      game.usedKeys.delete(trackKey(track));
+      game.queue.unshift(track);
+      $('#btn-buzz-start').classList.remove('hidden');
+      return;
+    }
+    game.usedSpotifyAudio = true;
+  } else {
+    player.src = track.preview;
+    player.currentTime = 0;
+    player.volume = 1;
+    try { await player.play(); } catch {}
+  }
+  $('#vinyl').classList.add('spinning');
+  $('#equalizer').classList.remove('paused');
+
+  // nel quiz le opzioni si vedono subito (si può ragionare!) ma si risponde solo dopo il buzz
+  if (game.mode === 'quiz') {
+    renderQuizAnswers(track, guessKind);
+    $('#answers-quiz').classList.add('locked');
+  }
+
+  const box = $('#game-buzzers');
+  box.innerHTML = game.players.map((p, i) => `
+    <button class="buzzer-btn" data-buzz="${i}" style="--hue:${playerHue(i)}">
+      <span class="bz-emoji">${p.emoji}</span>
+      <span class="bz-name">${escapeHtml(p.name)}</span>
+      <span class="bz-score">${p.score} pt</span>
+    </button>`).join('');
+  box.classList.remove('hidden');
+  box.querySelectorAll('[data-buzz]').forEach(b => b.onclick = () => buzzBook(+b.dataset.buzz));
+
+  startTimer(game.timerSec, () => buzzNoOne());
+}
+
+function buzzBook(i) {
+  if (game.buzzBooker >= 0 || game.answered) return;
+  game.buzzBooker = i;
+  game.turn = i;
+  clearTimer();
+  // musica in pausa: suspense!
+  player.pause();
+  if (setup.audio === 'spotify' && game.usedSpotifyAudio) spotifyPause();
+  $('#vinyl').classList.remove('spinning');
+  $('#equalizer').classList.add('paused');
+  sfx('tick'); vibrate([60, 40, 60]);
+  const p = game.players[i];
+  $('#game-player-emoji').textContent = p.emoji;
+  $('#game-player-name').textContent = p.name;
+  $('#game-buzzers').classList.add('hidden');
+  if (game.mode === 'quiz') $('#answers-quiz').classList.remove('locked');
+  else renderWriteAnswer();
+  startTimer(game.timerSec, () => onTimeout());
+}
+
+function buzzNoOne() {
+  if (game.answered) return;
+  game.answered = true;
+  $$('#answers-quiz .answer-btn').forEach(b => { if (b.dataset.ok === '1') b.classList.add('correct'); else b.classList.add('dim'); });
+  finishTurn(false, null); // nessun prenotato: nessuna penalità
+}
+
+// dopo il risultato: prossimo round o vittoria (nelle partite a prenotazione)
+function nextStep() {
+  if (game && game.playStyle === 'buzz' && (game.mode === 'quiz' || game.mode === 'write')) {
+    const sorted = [...game.players].sort((a, b) => b.score - a.score);
+    if (sorted[0].score >= game.target && sorted[0].score > (sorted[1] ? sorted[1].score : -1)) {
+      showWinner(sorted);
+      return;
+    }
+    buzzNextRound();
+  } else {
+    nextTurn();
+  }
+}
+
 /* ---- timer ---- */
 
 function startTimer(sec, onEnd) {
@@ -1210,6 +1348,8 @@ function computePoints(base) {
 }
 
 function answerQuiz(btn) {
+  const isBuzz = game.playStyle === 'buzz';
+  if (isBuzz && game.buzzBooker < 0) return; // prima bisogna prenotarsi
   game.answered = true;
   clearTimer();
   const ok = btn.dataset.ok === '1';
@@ -1218,7 +1358,7 @@ function answerQuiz(btn) {
     else if (b === btn) b.classList.add('wrong');
     else b.classList.add('dim');
   });
-  finishTurn(ok, ok ? computePoints(100) : null);
+  finishTurn(ok, ok ? (isBuzz ? { total: 200, streakBonus: 0 } : computePoints(100)) : null);
 }
 
 function answerWrite(skip = false) {
@@ -1232,8 +1372,10 @@ function answerWrite(skip = false) {
     const artistOk = track.artist.split(',').some(a => isMatch(val, a)) || isMatch(val, track.artist);
     ok = guessKind === 'title' ? titleOk : guessKind === 'artist' ? artistOk : (titleOk || artistOk);
   }
-  if (!ok && !skip && val.trim() && timeLeftFrac() > 0.05) {
-    // risposta sbagliata ma c'è ancora tempo: lascia riprovare
+  const isBuzz = game.playStyle === 'buzz';
+  if (!ok && !skip && val.trim() && timeLeftFrac() > 0.05 && !isBuzz) {
+    // risposta sbagliata ma c'è ancora tempo: lascia riprovare (solo a turni:
+    // con la prenotazione si rischia, un colpo solo!)
     vibrate(80);
     sfx('wrong');
     const input = $('#write-input');
@@ -1245,8 +1387,10 @@ function answerWrite(skip = false) {
   game.answered = true;
   clearTimer();
   // il titolo è più difficile dell'artista: vale di più
-  const base = guessKind === 'artist' ? 100 : guessKind === 'title' ? 150 : (titleOk ? 150 : 100);
-  finishTurn(ok, ok ? computePoints(base) : null);
+  const base = isBuzz
+    ? (guessKind === 'artist' ? 150 : guessKind === 'title' ? 200 : (titleOk ? 200 : 150))
+    : (guessKind === 'artist' ? 100 : guessKind === 'title' ? 150 : (titleOk ? 150 : 100));
+  finishTurn(ok, ok ? (isBuzz ? { total: base, streakBonus: 0 } : computePoints(base)) : null);
 }
 
 function onTimeout() {
@@ -1257,27 +1401,35 @@ function onTimeout() {
 }
 
 function finishTurn(ok, points) {
-  const p = activePlayer();
-  if (ok) {
-    p.streak++;
+  const isBuzz = game.playStyle === 'buzz' && (game.mode === 'quiz' || game.mode === 'write');
+  const booker = isBuzz ? game.buzzBooker : game.turn;
+  const p = booker >= 0 ? game.players[booker] : null;
+  let pointsText = '+0 punti';
+  if (p && ok) {
+    if (!isBuzz) p.streak++;
     p.score += points.total;
+    pointsText = `${p.emoji} +${points.total} punti` + (points.streakBonus ? ' 🔥' : '');
     sfx('correct'); vibrate([50, 40, 90]);
-  } else {
-    p.streak = 0;
+  } else if (p) {
+    if (isBuzz) { p.score = Math.max(0, p.score - 100); pointsText = `${p.emoji} −100 punti 😬`; }
+    else p.streak = 0;
     sfx('wrong'); vibrate(200);
+  } else {
+    sfx('wrong');
   }
   const t = game.current;
   setTimeout(() => {
-    $('#result-verdict').textContent = ok ? rand(['✅ Giusto!', '🎯 Bravissimo!', '🔥 Grande!', '💪 Esatto!']) : rand(['❌ Sbagliato!', '⏰ Tempo scaduto!', '😬 No…']);
+    let verdict;
+    if (ok) verdict = rand(['✅ Giusto!', '🎯 Bravissimo!', '🔥 Grande!', '💪 Esatto!']);
+    else if (!p) verdict = '😴 Nessuno si è prenotato!';
+    else verdict = timeLeftFrac() <= 0 ? '⏰ Tempo scaduto!' : '❌ Sbagliato!';
+    $('#result-verdict').textContent = verdict;
     $('#result-verdict').className = 'result-verdict ' + (ok ? 'ok' : 'ko');
-    if (!ok) $('#result-verdict').textContent = timeLeftFrac() <= 0 ? '⏰ Tempo scaduto!' : '❌ Sbagliato!';
     const art = $('#result-art');
     if (t.art) { art.src = t.art; art.style.display = ''; } else art.style.display = 'none';
     $('#result-title').textContent = cleanTitle(t.title);
     $('#result-artist').textContent = t.artist;
-    $('#result-points').textContent = ok
-      ? `+${points.total} punti` + (points.streakBonus ? ' 🔥' : '')
-      : '+0 punti';
+    $('#result-points').textContent = pointsText;
     $('#result-overlay').classList.remove('hidden');
   }, ok || timeLeftFrac() > 0 ? 900 : 300);
 
@@ -1519,6 +1671,11 @@ function rematch() {
     game.duelRound = 0;
     duelNextRound();
     show('screen-duel');
+  } else if (game.playStyle === 'buzz') {
+    game.players.forEach(p => { p.score = 0; p.streak = 0; });
+    game.turn = -1;
+    game.round = 0;
+    buzzNextRound();
   } else {
     game.players.forEach(p => { p.score = 0; p.streak = 0; });
     game.turn = -1;
@@ -1742,7 +1899,15 @@ function bindEvents() {
 
   // pass + gioco
   $('#btn-ready').onclick = () => { sfx('tick'); beginTurn(); };
-  $('#btn-next-turn').onclick = nextTurn;
+  $('#btn-next-turn').onclick = nextStep;
+  $('#btn-buzz-start').onclick = buzzStartRound;
+  $('#style-pills').addEventListener('click', e => {
+    const p = e.target.closest('.pill'); if (!p) return;
+    setup.playStyle = p.dataset.style;
+    store.set('gs_style', setup.playStyle);
+    $$('#style-pills .pill').forEach(x => x.classList.toggle('selected', x === p));
+    $('#style-hint').classList.toggle('hidden', setup.playStyle !== 'buzz');
+  });
   $('#btn-write-submit').onclick = () => answerWrite(false);
   $('#btn-write-skip').onclick = () => answerWrite(true);
   $('#write-input').addEventListener('keydown', e => { if (e.key === 'Enter') answerWrite(false); });
@@ -1787,8 +1952,9 @@ async function init() {
   $('#redirect-uri-box').textContent = spotifyRedirectUri();
   bindEvents();
   renderPlayers();
-  // allinea la pillola audio all'ultima scelta salvata
+  // allinea le pillole alle ultime scelte salvate
   $$('#audio-pills .pill').forEach(p => p.classList.toggle('selected', p.dataset.audio === setup.audio));
+  $$('#style-pills .pill').forEach(p => p.classList.toggle('selected', p.dataset.style === setup.playStyle));
   refreshSetupVisibility();
   await spotifyHandleRedirect();
   refreshSpotifyUi();

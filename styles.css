@@ -299,6 +299,14 @@ input::placeholder { color: var(--muted); }
 .bz-name { font-size: 17px; font-weight: 800; }
 .bz-score { font-size: 13px; opacity: .85; font-weight: 700; }
 .duel-result { text-align: center; display: flex; flex-direction: column; gap: 14px; margin-top: 14px; }
+/* buzzer compatti dentro la schermata quiz/scrittura */
+.duel-buzzers.compact { flex: 0 0 auto; margin-top: 14px; }
+.duel-buzzers.compact .buzzer-btn { min-height: 68px; flex-direction: row; gap: 10px; }
+.duel-buzzers.compact .bz-emoji { font-size: 24px; }
+.duel-buzzers.compact .bz-name { font-size: 15px; }
+.duel-buzzers.compact .bz-score { font-size: 12px; }
+.answers-quiz.locked .answer-btn { pointer-events: none; opacity: .55; }
+#btn-buzz-start { margin-top: 16px; }
 .duel-result .chain-feedback { font-size: 17px; line-height: 1.5; }
 
 /* ---------- winner ---------- */
