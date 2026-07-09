@@ -35,7 +35,7 @@
       </button>
       <button class="btn btn-glass" id="btn-howto">❓ Come si gioca</button>
     </div>
-    <p class="footer-note" id="version-note">v1.9.1 · gioco online in versione beta 🌐</p>
+    <p class="footer-note" id="version-note">v2.0 · ora si gioca anche online, ognuno sul suo telefono 🌐</p>
   </section>
 
   <!-- ============ ONLINE: HOME ============ -->
@@ -78,8 +78,107 @@
       <h3 class="setup-label" id="lobby-count">Giocatori</h3>
       <div id="lobby-players" class="players-list"></div>
 
-      <p class="muted hidden" id="lobby-host-hint" style="margin-top:16px">In attesa che l'host avvii la partita…</p>
+      <div id="lobby-host-settings">
+        <h3 class="setup-label">🎮 Modalità</h3>
+        <div class="pill-row" id="og-mode-pills">
+          <button class="pill selected" data-ogmode="quiz">🔠 Quiz 4 opzioni</button>
+          <button class="pill" data-ogmode="write">⌨️ Scrivila!</button>
+        </div>
+        <h3 class="setup-label">⚡️ Come si risponde</h3>
+        <div class="pill-row" id="og-style-pills">
+          <button class="pill selected" data-ogstyle="buzz">Prenotazione ⚡️</button>
+          <button class="pill" data-ogstyle="turns">A turni</button>
+        </div>
+        <h3 class="setup-label">🎯 Cosa indovinare</h3>
+        <div class="pill-row" id="og-guess-pills">
+          <button class="pill selected" data-ogguess="title">Titolo</button>
+          <button class="pill" data-ogguess="artist">Artista</button>
+          <button class="pill" data-ogguess="either">Uno dei due</button>
+        </div>
+        <h3 class="setup-label">🎧 Sorgente</h3>
+        <div class="pill-row" id="og-source-pills">
+          <button class="pill selected" data-ogsource="famous">🌟 Hit famose</button>
+          <button class="pill" data-ogsource="genre">🎼 Un genere</button>
+          <button class="pill" data-ogsource="spotify-top">💚 Gusti host</button>
+        </div>
+        <div class="pill-row hidden" id="og-genre-pills" style="margin-top:8px">
+          <button class="pill selected" data-oggenre="rap-ita">🇮🇹 Rap/Trap</button>
+          <button class="pill" data-oggenre="pop-ita">🇮🇹 Pop</button>
+          <button class="pill" data-oggenre="pop-int">🌍 Pop int.</button>
+          <button class="pill" data-oggenre="hiphop">🇺🇸 Hip-Hop</button>
+          <button class="pill" data-oggenre="latin">🌴 Latin</button>
+          <button class="pill" data-oggenre="dance">🎛 Dance</button>
+        </div>
+        <h3 class="setup-label">🏆 Punti per vincere</h3>
+        <div class="pill-row" id="og-target-pills">
+          <button class="pill" data-ogtarget="600">600</button>
+          <button class="pill selected" data-ogtarget="1000">1000</button>
+          <button class="pill" data-ogtarget="1500">1500</button>
+        </div>
+        <h3 class="setup-label">⏱ Secondi per rispondere</h3>
+        <div class="pill-row" id="og-timer-pills">
+          <button class="pill" data-ogtimer="10">10</button>
+          <button class="pill selected" data-ogtimer="15">15</button>
+          <button class="pill" data-ogtimer="20">20</button>
+        </div>
+      </div>
+      <p class="muted hidden" id="lobby-host-hint" style="margin-top:16px">In attesa che l'host scelga le impostazioni e avvii la partita…</p>
       <button class="btn btn-primary btn-big" id="btn-lobby-start" style="margin-top:22px">🚀 Avvia la partita</button>
+    </div>
+  </section>
+
+  <!-- ============ GIOCO ONLINE ============ -->
+  <section class="screen" id="screen-online-game">
+    <header class="topbar">
+      <button class="btn-icon" id="btn-og-leave">✕</button>
+      <div class="turn-indicator" id="og-header">Round 1</div>
+      <button class="btn-icon" id="btn-og-scores">🏆</button>
+    </header>
+
+    <!-- gate: sblocco audio + pronto -->
+    <div class="pass-content" id="og-ready">
+      <p class="pass-label">Partita in arrivo…</p>
+      <div class="pass-avatar">🎧</div>
+      <h1 class="pass-name" id="og-ready-title">Preparati!</h1>
+      <p class="muted" id="og-ready-sub">Tocca per attivare l'audio del tuo telefono</p>
+      <button class="btn btn-primary btn-big pulse" id="btn-og-ready">Sono pronto! 🎧</button>
+      <p class="muted" id="og-ready-wait" style="margin-top:16px"></p>
+    </div>
+
+    <!-- gioco -->
+    <div id="og-play" class="hidden" style="display:flex;flex-direction:column;flex:1">
+      <div class="timerbar-wrap"><div class="timerbar" id="og-timerbar"></div></div>
+      <div class="game-content">
+        <div class="vinyl-zone">
+          <div class="vinyl spinning" id="og-vinyl"><div class="vinyl-center">🎵</div></div>
+          <div class="equalizer" id="og-eq"><i></i><i></i><i></i><i></i><i></i></div>
+          <p class="game-question" id="og-question">Che canzone è?</p>
+        </div>
+        <div id="og-turn-banner" class="chain-turn hidden"></div>
+        <div id="og-buzzers" class="duel-buzzers compact hidden"></div>
+        <div id="og-answers-quiz" class="answers-quiz hidden"></div>
+        <div id="og-answers-write" class="answers-write hidden">
+          <input type="text" id="og-write-input" placeholder="Scrivi qui la risposta…" autocomplete="off" autocorrect="off" autocapitalize="off" enterkeyhint="send">
+          <div class="write-btns">
+            <button class="btn btn-glass" id="btn-og-write-skip">Non lo so 🤷</button>
+            <button class="btn btn-primary" id="btn-og-write-submit">Conferma ✓</button>
+          </div>
+        </div>
+        <p class="chain-feedback" id="og-wait-msg"></p>
+      </div>
+    </div>
+
+    <!-- risultato del round -->
+    <div class="result-overlay hidden" id="og-reveal">
+      <div class="result-card">
+        <div class="result-verdict" id="og-reveal-verdict"></div>
+        <img class="result-art" id="og-reveal-art" alt="" src="">
+        <div class="result-title" id="og-reveal-title"></div>
+        <div class="result-artist" id="og-reveal-artist"></div>
+        <div class="result-points" id="og-reveal-points"></div>
+        <div id="og-reveal-scores" class="og-mini-scores"></div>
+        <p class="muted" id="og-reveal-next">Prossimo round…</p>
+      </div>
     </div>
   </section>
 
@@ -429,6 +528,7 @@
       <p><b>⌨️ Scrivila!</b> — Come il quiz, ma la risposta la scrivi tu. Non serve essere perfetti: maiuscole, accenti e piccoli errori di battitura sono perdonati. 😉 Nella variante "uno dei due", il titolo vale 150 punti e l'artista 100: rischiare paga!</p>
       <p><b>🔗 Catena d'artista</b> — Scegliete un artista. A turno ognuno nomina una sua canzone (vera e non già detta!). Chi si blocca o sbaglia allo scadere del tempo è eliminato. Vince l'ultimo che resta.</p>
       <p><b>🤝 Duello Feat</b> — L'app propone due artisti che hanno collaborato. Il primo che tocca il proprio buzzer si prenota e deve scrivere il titolo di una canzone fatta insieme: +200 punti se è giusta, −100 se sbaglia o scade il tempo. Prenotarsi è un rischio!</p>
+      <p><b>🌐 Gioca online</b> — Ognuno sul proprio telefono! Crea una stanza, manda il link agli amici e vedi tutti nella lobby. La canzone parte su ogni telefono e ognuno risponde dal suo (a turni oppure a prenotazione, con buzzer personale). Richiede una configurazione del database una tantum da parte di chi ospita.</p>
       <p><b>💚 Spotify</b> — Collega il tuo account per quiz basati sui tuoi brani più ascoltati, i preferiti o le tue playlist. La musica viene riprodotta con estratti gratuiti di 30 secondi: non serve Spotify Premium!</p>
       <p><b>🔥 Bonus serie</b> — Indovina più volte di fila per punti extra!</p>
     </div>
@@ -503,6 +603,7 @@
 
 <script src="./net.js"></script>
 <script src="./online.js"></script>
+<script src="./onlinegame.js"></script>
 <script src="./app.js"></script>
 </body>
 </html>

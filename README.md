@@ -9,6 +9,12 @@ Party game musicale da giocare con gli amici, tutti sullo stesso telefono. **100
 - **🔗 Catena d'artista** — scegliete un artista: a turno ognuno nomina una sua canzone vera e non già detta. Chi si blocca è eliminato, vince l'ultimo che resta.
 - **🤝 Duello Feat** — l'app propone due artisti che hanno collaborato (dai tuoi gusti Spotify, da una playlist o da un genere a scelta). Lo schermo si divide in buzzer, uno per giocatore: il primo che si prenota deve nominare una canzone fatta insieme. +200 se giusta, −100 se sbagliata!
 
+## 🌐 Gioco online (ognuno sul proprio telefono)
+
+Oltre al gioco sullo stesso telefono, puoi giocare **online**: chi ospita crea una stanza e condivide un link; gli amici lo aprono e entrano dalla propria lobby. La canzone parte su ogni telefono e ognuno risponde dal suo, a turni o a prenotazione (buzzer personale).
+
+Richiede una configurazione una tantum di un database gratuito (Firebase) da parte di chi ospita — le istruzioni guidate sono dentro l'app in **🌐 Gioca online → ⚙️**. Gli invitati non devono configurare nulla: il link contiene già tutto.
+
 Sorgenti musicali per i quiz: **i tuoi gusti Spotify** (top brani + preferiti), **una tua playlist**, **un genere** a scelta, **artisti a scelta** o un **mix di hit famose**. L'audio usa gli estratti gratuiti di 30 secondi di iTunes/Deezer.
 
 ## 📲 Metterla sul telefono (gratis)

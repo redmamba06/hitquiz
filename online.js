@@ -147,6 +147,7 @@ function enterLobby() {
   $('#lobby-code').textContent = online.code;
   $('#lobby-link').textContent = onlineLink(online.code);
   $('#btn-lobby-start').classList.toggle('hidden', !online.isHost);
+  $('#lobby-host-settings').classList.toggle('hidden', !online.isHost);
   $('#lobby-host-hint').classList.toggle('hidden', online.isHost);
 
   startHeartbeat();
@@ -156,9 +157,9 @@ function enterLobby() {
     renderLobbyPlayers();
   });
   online.room.watch('meta/state', (state) => {
-    if (state === 'playing' && document.querySelector('.screen.active').id === 'screen-lobby') {
-      // la partita è iniziata (avviata dall'host): entreremo qui nella fase 2
-      toast('La partita sta per iniziare! 🎮');
+    // quando l'host avvia, tutti entrano nel gioco sincronizzato
+    if (state === 'playing' && !window.og.active) {
+      if (window.ogStart) ogStart();
     }
   });
 }
@@ -196,6 +197,7 @@ function renderLobbyPlayers() {
 }
 
 async function leaveRoom() {
+  if (window.og && og.active) ogStop();
   stopHeartbeat();
   try {
     if (online.room) {
@@ -213,13 +215,8 @@ async function leaveRoom() {
   show('screen-home');
 }
 
-async function hostStartGame() {
-  const list = activeLobbyPlayers();
-  if (list.length < 2) { toast('Servono almeno 2 giocatori!'); return; }
-  // Fase 2 (in arrivo): scelta modalità/impostazioni e round sincronizzati.
-  await online.room.update('meta', { state: 'playing' });
-  toast('🚧 La partita sincronizzata è in arrivo nel prossimo aggiornamento!', 4000);
-  await online.room.update('meta', { state: 'lobby' });
+function hostStartGame() {
+  if (window.ogHostStart) ogHostStart();
 }
 
 /* ---------- ingresso schermata online ---------- */

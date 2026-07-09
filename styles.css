@@ -374,6 +374,16 @@ input::placeholder { color: var(--muted); }
   font-size: 12px; padding: 3px 10px; border-radius: 999px;
 }
 
+.og-mini-scores { display: flex; flex-direction: column; gap: 5px; margin: 6px 0; }
+.og-mini-scores .r {
+  display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700;
+  background: rgba(255,255,255,.05); border-radius: 10px; padding: 7px 12px;
+}
+.og-mini-scores .r .p { margin-left: auto; color: var(--gold); }
+.og-mini-scores .r.delta-pos { border-left: 3px solid var(--green); }
+.og-mini-scores .r.delta-neg { border-left: 3px solid var(--red); }
+#lobby-host-settings { margin-top: 8px; }
+
 /* ---------- toast ---------- */
 .toast {
   position: fixed; left: 50%; bottom: calc(30px + var(--safe-bottom)); transform: translateX(-50%);

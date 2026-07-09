@@ -2028,6 +2028,7 @@ async function init() {
 
   // multiplayer online
   if (window.bindOnlineEvents) bindOnlineEvents();
+  if (window.ogBindEvents) ogBindEvents();
   const nameInput = $('#online-name-input');
   if (nameInput) nameInput.addEventListener('keydown', e => {
     if (e.key === 'Enter') { const b = $('#btn-online-create'); if (b && !b.classList.contains('hidden')) b.click(); }
